@@ -123,15 +123,14 @@ class PumpCommand extends ContainerAwareCommand
                             $logs[] = new Log("No such pair (".$basicToken."/".$token.") on Binance", Log::LOG_LEVEL_ERROR);
                             continue;
                         }
-
                         if ($tokenAmount <= 0) {
                             $logs[] = new Log("Ignoring ".$basicToken."/".$token." according to settings", Log::LOG_LEVEL_INFO);
                             continue;
                         }
-                        if ($tokenAmount > $app->getBinanceBalance($basicToken)) {
-                            $logs[] = new Log("Ignoring ".$basicToken."/".$token." due to insufficient balance", Log::LOG_LEVEL_INFO);
-                            continue;
-                        }
+//                        if ($tokenAmount > $app->getBinanceBalance($basicToken)) {
+//                            $logs[] = new Log("Ignoring ".$basicToken."/".$token." due to insufficient balance", Log::LOG_LEVEL_INFO);
+//                            continue;
+//                        }
 
                         $trade->getPrice()->setBuy($buyPrice);
                         $trade->setBuyTokenAmount($trade->getAmount() / $trade->getPrice()->getBuy());
@@ -152,14 +151,17 @@ class PumpCommand extends ContainerAwareCommand
                         }
                         $trade->setState(Trade::STATE_OPEN);
                         $app->addTrade($trade);
-
+                        unset($trade);
                     }
                 }
             }
 
             /** @var Log $l */
             $app->getJink()->postLogs($logs);
-
+            foreach ($logs as $log) {
+                unset($log);
+            }
+            unset($logs);
 
             $view->renderView($app);
             usleep($app->getIntervalTime() * 1000);
