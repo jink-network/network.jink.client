@@ -156,12 +156,12 @@ class PumpCommand extends ContainerAwareCommand
 
             }
 
-
-
-            /** @var Log $l */
-            $app->getJink()->postLogs($logs);
-            foreach ($logs as $log) {
-                unset($log);
+            if (count($logs) > 0) {
+                /** @var Log $l */
+                $app->getJink()->postLogs($logs);
+                foreach ($logs as $log) {
+                    unset($log);
+                }
             }
             unset($logs);
 

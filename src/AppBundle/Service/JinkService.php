@@ -173,6 +173,7 @@ class JinkService
                 throw new \Exception(curl_error($ch), curl_errno($ch));
             }
             if (curl_getinfo($ch, CURLINFO_HTTP_CODE) === $this::HTTP_OK) {
+                curl_close($ch);
                 unset($ch);
                 $result = json_decode($result, true);
                 $this->setLastSignalId($result['lastSignalId']);
@@ -276,6 +277,7 @@ class JinkService
                 throw new \Exception(curl_error($ch), curl_errno($ch));
             }
             if (curl_getinfo($ch, CURLINFO_HTTP_CODE) === $this::HTTP_OK) {
+                curl_close($ch);
                 unset($ch);
                 return true;
             }
@@ -326,6 +328,7 @@ class JinkService
                 throw new \Exception(curl_error($ch), curl_errno($ch));
             }
             if (curl_getinfo($ch, CURLINFO_HTTP_CODE) === $this::HTTP_OK) {
+                curl_close($ch);
                 unset($ch);
                 return true;
             }
@@ -362,6 +365,7 @@ class JinkService
             }
 
             if (curl_getinfo($ch, CURLINFO_HTTP_CODE) === $this::HTTP_OK) {
+                curl_close($ch);
                 unset($ch);
                 $result = json_decode($result, true);
                 if (isset($result['signalId'])) {
@@ -401,6 +405,7 @@ class JinkService
             }
 
             if (curl_getinfo($ch, CURLINFO_HTTP_CODE) === $this::HTTP_OK) {
+                curl_close($ch);
                 unset($ch);
                 $result = json_decode($result, true);
                 $this->setLastSignalId($result['lastSignalId']);
