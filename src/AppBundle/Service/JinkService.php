@@ -167,10 +167,13 @@ class JinkService
             );
 
             $result = curl_exec($ch);
+            unset($body);
+
             if ($result === false) {
                 throw new \Exception(curl_error($ch), curl_errno($ch));
             }
             if (curl_getinfo($ch, CURLINFO_HTTP_CODE) === $this::HTTP_OK) {
+                unset($ch);
                 $result = json_decode($result, true);
                 $this->setLastSignalId($result['lastSignalId']);
                 return true;
@@ -179,6 +182,7 @@ class JinkService
             echo $e->getMessage();
         }
 
+        unset($ch);
         return false;
     }
 
@@ -243,6 +247,7 @@ class JinkService
             $log['timestamp'] = $l->getCreatedAt()->format("Y-m-d H:i:s");
             $body[] = $log;
         }
+        unset($logs);
         $body = json_encode($body);
         try {
             $ch = curl_init();
@@ -265,17 +270,20 @@ class JinkService
             );
 
             $result = curl_exec($ch);
+            unset($body);
 
             if ($result === false) {
                 throw new \Exception(curl_error($ch), curl_errno($ch));
             }
             if (curl_getinfo($ch, CURLINFO_HTTP_CODE) === $this::HTTP_OK) {
+                unset($ch);
                 return true;
             }
         } catch (\Exception $e) {
             echo $e->getMessage();
         }
 
+        unset($ch);
         return false;
     }
 
@@ -290,6 +298,7 @@ class JinkService
             'level' => $log->getLevel(),
             'timestamp' => $log->getCreatedAt()->format("Y-m-d H:i:s")
         ]);
+        unset($log);
         try {
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $this->apiUrl .'log?client_id='.$this->getClientId());
@@ -311,17 +320,19 @@ class JinkService
             );
 
             $result = curl_exec($ch);
+            unset($body);
 
             if ($result === false) {
                 throw new \Exception(curl_error($ch), curl_errno($ch));
             }
             if (curl_getinfo($ch, CURLINFO_HTTP_CODE) === $this::HTTP_OK) {
+                unset($ch);
                 return true;
             }
         } catch (\Exception $e) {
             echo $e->getMessage();
         }
-
+        unset($ch);
         return false;
     }
 
@@ -351,6 +362,7 @@ class JinkService
             }
 
             if (curl_getinfo($ch, CURLINFO_HTTP_CODE) === $this::HTTP_OK) {
+                unset($ch);
                 $result = json_decode($result, true);
                 if (isset($result['signalId'])) {
                     $this->setLastSignalId($result['signalId']);
@@ -360,6 +372,7 @@ class JinkService
         } catch (\Exception $e) {
             echo $e->getMessage();
         }
+        unset($ch);
         return false;
     }
 
@@ -388,6 +401,7 @@ class JinkService
             }
 
             if (curl_getinfo($ch, CURLINFO_HTTP_CODE) === $this::HTTP_OK) {
+                unset($ch);
                 $result = json_decode($result, true);
                 $this->setLastSignalId($result['lastSignalId']);
                 return true;
@@ -395,7 +409,7 @@ class JinkService
         } catch (\Exception $e) {
             echo $e->getMessage();
         }
-
+        unset($ch);
         return false;
     }
 }
