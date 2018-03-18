@@ -57,8 +57,10 @@ class PumpCommand extends ContainerAwareCommand
             $input->getOption('dev')
         );
 
-        $view = new View($input, $output);
-        $view->getOutput()->write(sprintf("\033\143"));
+        if (!$app->isProduction()) {
+            $view = new View($input, $output);
+            $view->getOutput()->write(sprintf("\033\143"));
+        }
 
         /** If problem with Binance connection -- EXIT */
         if (empty($app->getBinanceBalances())) {
