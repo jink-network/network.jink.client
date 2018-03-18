@@ -105,6 +105,7 @@ class PumpCommand extends ContainerAwareCommand
                 $signal = $app->getJink()->getSignal();
 
                 /** try activate trading mode */
+
                 if (isset($signal['settings'])) {
                     $token = $signal['token'];
                     $logs[] = new Log("New ".$signal['strength']." signal for ".$token, Log::LOG_LEVEL_INFO);
@@ -127,10 +128,6 @@ class PumpCommand extends ContainerAwareCommand
                             $logs[] = new Log("Ignoring ".$basicToken."/".$token." according to settings", Log::LOG_LEVEL_INFO);
                             continue;
                         }
-//                        if ($tokenAmount > $app->getBinanceBalance($basicToken)) {
-//                            $logs[] = new Log("Ignoring ".$basicToken."/".$token." due to insufficient balance", Log::LOG_LEVEL_INFO);
-//                            continue;
-//                        }
 
                         $trade->getPrice()->setBuy($buyPrice);
                         $trade->setBuyTokenAmount($trade->getAmount() / $trade->getPrice()->getBuy());
@@ -154,7 +151,10 @@ class PumpCommand extends ContainerAwareCommand
                         unset($trade);
                     }
                 }
+
             }
+
+
 
             /** @var Log $l */
             $app->getJink()->postLogs($logs);
@@ -163,7 +163,9 @@ class PumpCommand extends ContainerAwareCommand
             }
             unset($logs);
 
-            $view->renderView($app);
+            if (!$app->isProduction()) {
+                $view->renderView($app);
+            }
             usleep($app->getIntervalTime() * 1000);
         }
     }
