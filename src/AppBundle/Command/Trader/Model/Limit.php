@@ -18,6 +18,9 @@ class Limit {
     /** @var float */
     private $loss;
 
+    /** @var float */
+    private $time;
+
     /**
      * @return float
      */
@@ -66,6 +69,21 @@ class Limit {
         $this->loss = $loss;
     }
 
+    /**
+     * @return float
+     */
+    public function getTime(): float
+    {
+        return $this->time;
+    }
+
+    /**
+     * @param float $time
+     */
+    public function setTime(float $time): void
+    {
+        $this->time = $time;
+    }
 
     /**
      * Limit constructor.
@@ -75,6 +93,7 @@ class Limit {
         $this->profit = 0;
         $this->dump = 0;
         $this->loss = 0;
+        $this->time = 0;
     }
 
 }

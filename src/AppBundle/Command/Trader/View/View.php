@@ -119,6 +119,7 @@ class View {
         $this->getIo()->text('Profit limit: '.$app->getLimit()->getProfit().'%');
         $this->getIo()->text('Dump limit:   '.$app->getLimit()->getDump().'% [Triggers only with positive profit]');
         $this->getIo()->text('Loss limit:   '.$app->getLimit()->getLoss().'%');
+        $this->getIo()->text('Time limit:   '.$app->getLimit()->getTime().'min');
         $this->getIo()->newLine(1);
 
         /** @var Trade $trade */

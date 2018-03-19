@@ -18,6 +18,9 @@ class Trade {
     const STATE_CLOSED = 2;
     const STATE_ERROR = 4;
 
+    /** @var \DateTime */
+    private $timestamp;
+
     /** @var string */
     private $token;
 
@@ -48,6 +51,21 @@ class Trade {
     /** @var int */
     private $state;
 
+    /**
+     * @return \DateTime
+     */
+    public function getTimestamp(): \DateTime
+    {
+        return $this->timestamp;
+    }
+
+    /**
+     * @param \DateTime $timestamp
+     */
+    public function setTimestamp(\DateTime $timestamp): void
+    {
+        $this->timestamp = $timestamp;
+    }
 
     /**
      * @return string
@@ -222,6 +240,7 @@ class Trade {
 
     public function __construct()
     {
+        $this->setTimestamp(new \DateTime());
         $this->setCurrent(new Current());
         $this->setCertainty(new Certainty());
         $this->setPrice(new Price());
@@ -383,6 +402,7 @@ class Trade {
      * @return array|bool|mixed
      */
     public function sellOnLimits($certaintyLimit, $binance, $isProduction) {
+
         if (($this->getCertainty()->getProfit() >= $certaintyLimit)
             || ($this->getCertainty()->getDump() >= $certaintyLimit)
             || ($this->getCertainty()->getLoss() >= $certaintyLimit)) {
@@ -392,6 +412,26 @@ class Trade {
                 return $this->sellMarket($binance);
             }
             return [];
+        }
+        return false;
+    }
+
+    /**
+     * @param $timeLimit
+     * @param $binance
+     * @return array|bool|mixed
+     */
+    public function sellOnTime($timeLimit, $binance, $isProduction) {
+
+        if ($timeLimit > 0) {
+            $now = new \DateTime();
+            if ($this->getTimestamp() < $now->modify("-".$timeLimit." minutes")) {
+                $this->setState(Trade::STATE_CLOSED);
+                if ($isProduction) {
+                    return $this->sellMarket($binance);
+                }
+                return [];
+            }
         }
         return false;
     }
