@@ -270,6 +270,16 @@ class Trade {
     }
 
     /**
+     * @param $x
+     * @param $y
+     * @return float|int
+     */
+    function fmodRound($x, $y) {
+        $i = round($x / $y);
+        return $x - $i * $y;
+    }
+
+    /**
      * @return bool
      */
     public function isOpen()
@@ -287,8 +297,6 @@ class Trade {
 
     /**
      * @return bool|float
-     *
-     * The round in fmod is used to eliminate -e echo round(fmod(2.654343434-0.01, 0.01),5); -- try without round
      */
     public function roundTokenAmount($tokenAmount) {
         for ($i=5; $i>=0; $i--) {
@@ -297,7 +305,7 @@ class Trade {
 
             if ($tokenAmount >= $exchangeFilters['minQty']
                 && $tokenAmount <= $exchangeFilters['maxQty']
-                && (round(fmod(($tokenAmount - $exchangeFilters['minQty']), (float)$exchangeFilters['stepSize']),5) == 0)) {
+                && ($this->fmodRound($tokenAmount - $exchangeFilters['minQty'], (float)$exchangeFilters['stepSize']) == 0)) {
                 return $tokenAmount;
             }
         }

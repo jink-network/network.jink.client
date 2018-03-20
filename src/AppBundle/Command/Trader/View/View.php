@@ -99,7 +99,8 @@ class View {
      * @param App $app
      */
     public function renderView(App $app) {
-
+        $this->getOutput()->write(sprintf("\033\143"));
+        $this->getIo()->title('[JiNK] Client'.(!$app->isProduction()?' [dev]':''));
         if ($app->isTrading()) {
             $this->renderViewTrading($app);
         } else {
@@ -111,9 +112,6 @@ class View {
      * @param App $app
      */
     public function renderViewTrading(App $app) {
-
-        $this->getOutput()->write(sprintf("\033\143"));
-        $this->getIo()->title('[JiNK] Client'.(!$app->isProduction()?' [dev]':''));
 
         $this->getIo()->section('Application settings:');
         $this->getIo()->text('Profit limit: '.$app->getLimit()->getProfit().'%');
@@ -158,9 +156,6 @@ class View {
      * @param App $app
      */
     public function renderViewWaiting(App $app) {
-        $this->getOutput()->write(sprintf("\033\143"));
-        $this->getIo()->title('[JiNK] Client'.(!$app->isProduction()?' [dev]':''));
         $this->getIo()->section('Waiting for signal...');
-
     }
 }
