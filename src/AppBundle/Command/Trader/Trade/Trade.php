@@ -330,11 +330,10 @@ class Trade {
      * @return array|bool|mixed
      */
     public function buyMarket(\Binance\API $binance) {
-        $result = false;
 
         $buyTokenAmount = $this->roundTokenAmount($this->getBuyTokenAmount());
         if (!$buyTokenAmount) {
-            return $result;
+            return ['msg' => 'Invalid amount to Buy: '.$this->getBuyTokenAmount().', rounded to 0'];
         }
         $result = $binance->marketBuy($this->getTokenPair(), $buyTokenAmount);
 
@@ -351,13 +350,12 @@ class Trade {
      * @return array|bool|mixed
      */
     private function sellMarket(\Binance\API $binance, $fee=0.001) {
-        $result = false;
 
         $sellTokenAmount = $this->getBuyTokenAmount()-($this->getBuyTokenAmount() * $fee);
         $sellTokenAmount = $this->roundTokenAmount($sellTokenAmount);
 
         if (!$sellTokenAmount) {
-            return $result;
+            return ['msg' => 'Invalid amount to Sell: '.$this->getBuyTokenAmount().', rounded to 0'];
         }
         $result = $binance->marketSell($this->getTokenPair(), $sellTokenAmount);
 
@@ -434,6 +432,7 @@ class Trade {
         if ($timeLimit > 0) {
             $now = new \DateTime();
             if ($this->getTimestamp() < $now->modify("-".$timeLimit." minutes")) {
+                // trigger sale
                 $this->setState(Trade::STATE_CLOSED);
                 if ($isProduction) {
                     return $this->sellMarket($binance);

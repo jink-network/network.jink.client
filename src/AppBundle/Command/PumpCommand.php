@@ -100,7 +100,7 @@ class PumpCommand extends ContainerAwareCommand
 
                             if ($app->isProduction() && !isset($result['orderId'])) {
                                 $trade->setState(Trade::STATE_ERROR);
-                                $logs[] = new Log("Error while selling pair " . $trade->getBasicToken() . "/" . $trade->getToken(), Log::LOG_LEVEL_ERROR);
+                                $logs[] = new Log("Error while selling pair " . $trade->getBasicToken() . "/" . $trade->getToken().": ".$result['msg'], Log::LOG_LEVEL_ERROR);
                             }
                         }
                     }
@@ -167,7 +167,7 @@ class PumpCommand extends ContainerAwareCommand
                             if (!$result) {
                                 $logs[] = new Log("Invalid Binance response for setting up order", Log::LOG_LEVEL_ERROR);
                             } elseif (!isset($result['orderId'])) {
-                                $logs[] = new Log("Invalid Binance response " . $result['msg'] . " [" . $result['code'] . "]", Log::LOG_LEVEL_ERROR);
+                                $logs[] = new Log("Error while buying pair " . $trade->getBasicToken() . "/" . $trade->getToken().": ".$result['msg'], Log::LOG_LEVEL_ERROR);
                             } else {
                                 $trade->setState(Trade::STATE_OPEN);
                                 $app->addTrade($trade);
