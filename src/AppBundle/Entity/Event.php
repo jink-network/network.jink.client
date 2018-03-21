@@ -21,14 +21,33 @@ class Event {
     /** @var string */
     private $token;
 
-    /** @var string */
+    /** @var float */
     private $price;
 
-    /** @var string */
+    /** @var float|null */
     private $profit;
 
-    /** @var integer */
-    private $signalId;
+    /** @var \DateTime */
+    private $createdAt;
+
+    /**
+     * Event constructor.
+     * @param $action
+     * @param $basicToken
+     * @param $token
+     * @param $price
+     * @param null $profit
+     */
+    public function __construct($action, $basicToken, $token, $price, $profit = null)
+    {
+        $this->action = $action;
+        $this->basicToken = $basicToken;
+        $this->token = $token;
+        $this->price = $price;
+        $this->profit = $profit;
+        $this->setCreatedAt(new \DateTime());
+    }
+
 
     /**
      * @return string
@@ -79,51 +98,51 @@ class Event {
     }
 
     /**
-     * @return string
+     * @return float
      */
-    public function getPrice(): string
+    public function getPrice(): float
     {
         return $this->price;
     }
 
     /**
-     * @param string $price
+     * @param float $price
      */
-    public function setPrice(string $price): void
+    public function setPrice(float $price): void
     {
         $this->price = $price;
     }
 
     /**
-     * @return string
+     * @return float|null
      */
-    public function getProfit(): string
+    public function getProfit(): ?float
     {
         return $this->profit;
     }
 
     /**
-     * @param string $profit
+     * @param float|null $profit
      */
-    public function setProfit(string $profit): void
+    public function setProfit(?float $profit): void
     {
         $this->profit = $profit;
     }
 
     /**
-     * @return int
+     * @return \DateTime
      */
-    public function getSignalId(): int
+    public function getCreatedAt(): \DateTime
     {
-        return $this->signalId;
+        return $this->createdAt;
     }
 
     /**
-     * @param int $signalId
+     * @param \DateTime $createdAt
      */
-    public function setSignalId(int $signalId): void
+    public function setCreatedAt(\DateTime $createdAt): void
     {
-        $this->signalId = $signalId;
+        $this->createdAt = $createdAt;
     }
 
 }

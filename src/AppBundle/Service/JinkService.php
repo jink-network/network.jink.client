@@ -201,8 +201,64 @@ class JinkService
             'token' => $event->getToken(),
             'price' => $event->getPrice(),
             'profit' => $event->getProfit(),
-            'signal_id' => $this->getLastSignalId(),
+            'timestamp' => $event->getCreatedAt()->format("Y-m-d H:i:s")
         ]);
+        try {
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $this->apiUrl .'event?client_id='.$this->getClientId());
+            curl_setopt($ch, CURLOPT_POST, 1);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_HTTPPROXYTUNNEL, true);
+            curl_setopt(
+                $ch,
+                CURLOPT_HTTPHEADER,
+                [
+                    'Content-Type: application/json',
+                    'accept: application/json',
+                    'charset=utf-8',
+                    $this::TOKEN_PARAM_NAME.': '.$this->getApiKey(),
+                    'production: '.($this->isProduction()?'1':'0')
+                ]
+            );
+
+            $result = curl_exec($ch);
+            if ($result === false) {
+                throw new \Exception(curl_error($ch), curl_errno($ch));
+            }
+            if (curl_getinfo($ch, CURLINFO_HTTP_CODE) === $this::HTTP_OK) {
+                return true;
+            }
+        } catch (\Exception $e) {
+            echo $e->getMessage();
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array $history
+     * @return bool
+     */
+    public function postHistory(array $history): bool
+    {
+        $body = [];
+        /** @var Event $h */
+        foreach ($history as $h) {
+            $event = [];
+            $event['action'] = $h->getAction();
+            $event['basic_token'] = $h->getBasicToken();
+            $event['token'] = $h->getToken();
+            $event['price'] = $h->getPrice();
+            $event['profit'] = $h->getProfit();
+            $event['timestamp'] = $h->getCreatedAt()->format("Y-m-d H:i:s");
+            $body[] = $event;
+        }
+        unset($history);
+        $body = json_encode($body);
         try {
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $this->apiUrl .'history?client_id='.$this->getClientId());
@@ -247,6 +303,7 @@ class JinkService
     {
         $body = [];
         foreach ($logs as $l) {
+            $log = [];
             $log['text'] = (!$this->isProduction()?'[dev] ':'').$l->getText();
             $log['level'] = $l->getLevel();
             $log['timestamp'] = $l->getCreatedAt()->format("Y-m-d H:i:s");
@@ -378,8 +435,8 @@ class JinkService
                 curl_close($ch);
                 unset($ch);
                 $result = json_decode($result, true);
-                if (isset($result['signalId'])) {
-                    $this->setLastSignalId($result['signalId']);
+                if (isset($result['signal']['id'])) {
+                    $this->setLastSignalId($result['signal']['id']);
                 }
                 return $result;
             }
@@ -420,7 +477,7 @@ class JinkService
                 curl_close($ch);
                 unset($ch);
                 $result = json_decode($result, true);
-                $this->setLastSignalId($result['lastSignalId']);
+                $this->setLastSignalId($result['signal']['id']);
                 return true;
             }
         } catch (\Exception $e) {

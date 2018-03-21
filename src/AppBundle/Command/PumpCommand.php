@@ -6,6 +6,7 @@ namespace AppBundle\Command;
 use AppBundle\Command\Trader\App;
 use AppBundle\Command\Trader\Trade\Trade;
 use AppBundle\Command\Trader\View\View;
+use AppBundle\Entity\Event;
 use AppBundle\Entity\Log;
 use Symfony\Bundle\FrameworkBundle\Command\ContainerAwareCommand;
 use Symfony\Component\Console\Input\InputArgument;
@@ -68,6 +69,7 @@ class PumpCommand extends ContainerAwareCommand
         }
 
         $i = 0;
+        $events = [];
         while (true) {
             $logs = [];
 
@@ -89,13 +91,16 @@ class PumpCommand extends ContainerAwareCommand
                             $result = $trade->sellOnTime($app->getLimit()->getTime(), $app->getBinance(), $app->isProduction());
                         }
                         if (is_array($result)) {
+
+                            $now = new \DateTime();
+                            $interval = $now->diff($trade->getTimestamp());
+
+                            $logs[] = new Log("Placed Market Sell for " . $trade->getBasicToken() . "/" . $trade->getToken() . " with ".$trade->getCurrent()->getProfit()."% profit [Dump: ".$trade->getCurrent()->getDump()."%] after ".$interval->format("%h hours %i minutes"), Log::LOG_LEVEL_INFO);
+                            $events[] = new Event(Event::ACTION_SELL, $trade->getBasicToken(), $trade->getToken(), $trade->getPrice()->getCurrent(), $trade->getCurrent()->getProfit());
+
                             if ($app->isProduction() && !isset($result['orderId'])) {
                                 $trade->setState(Trade::STATE_ERROR);
                                 $logs[] = new Log("Error while selling pair " . $trade->getBasicToken() . "/" . $trade->getToken(), Log::LOG_LEVEL_ERROR);
-                            } else {
-                                $now = new \DateTime();
-                                $interval = $now->diff($trade->getTimestamp());
-                                $logs[] = new Log("Placed Market Sell for " . $trade->getBasicToken() . "/" . $trade->getToken() . " with ".$trade->getCurrent()->getProfit()."% profit [Dump: ".$trade->getCurrent()->getDump()."%] after ".$interval->format("%h hours %i minutes"), Log::LOG_LEVEL_INFO);
                             }
                         }
                     }
@@ -103,7 +108,14 @@ class PumpCommand extends ContainerAwareCommand
                 if (!$app->isTrading()) {
                     // close trades with LOGs
                     $logs[] = new Log("Closing trades on ".$trade->getToken(), Log::LOG_LEVEL_INFO);
-
+                    if (count($events) > 0) {
+                        /** @var Event $event */
+                        $app->getJink()->postHistory($events);
+                        foreach ($events as $event) {
+                            unset($event);
+                        }
+                        $events = [];
+                    }
                     // re-set app
                     $app->resetApp();
                 }
@@ -114,14 +126,18 @@ class PumpCommand extends ContainerAwareCommand
                 /** try activate trading mode */
 
                 if (isset($signal['settings'])) {
-                    $token = $signal['token'];
-                    $logs[] = new Log("New ".$signal['strength']." signal for ".$token, Log::LOG_LEVEL_INFO);
+                    $token = $signal['signal']['token'];
+                    $logs[] = new Log("New ".$signal['signal']['strength']." signal for ".$token, Log::LOG_LEVEL_INFO);
                     $app->getLimit()->setProfit((float)$signal['settings']['limit']['profit']);
                     $app->getLimit()->setDump((float)$signal['settings']['limit']['dump']);
                     $app->getLimit()->setLoss((float)$signal['settings']['limit']['loss']);
                     $app->getLimit()->setTime((int)$signal['settings']['limit']['time']);
 
                     foreach ($signal['settings']['token'] as $basicToken => $tokenAmount) {
+                        if (isset($signal['signal']['basicToken']) && $signal['signal']['basicToken'] != $basicToken) {
+                            continue;
+                        }
+
                         $trade = new Trade();
                         $trade->setBasicToken($basicToken);
 
@@ -142,6 +158,9 @@ class PumpCommand extends ContainerAwareCommand
                         $trade->setBuyTokenAmount($trade->getAmount() / $trade->getPrice()->getBuy());
                         $trade->setExchangeFilters($app->getExchangeFiltersTokenPair($trade->getTokenPair()));
 
+                        $logs[] = new Log("Placing Market Buy for " . $trade->getBasicToken() . "/" . $trade->getToken() . " at price " . sprintf("%.8f", $trade->getPrice()->getBuy()), Log::LOG_LEVEL_INFO);
+                        $events[] = new Event(Event::ACTION_BUY, $trade->getBasicToken(), $trade->getToken(), $trade->getPrice()->getBuy());
+
                         if ($app->isProduction()) {
                             $result = $trade->buyMarket($app->getBinance());
 
@@ -152,13 +171,12 @@ class PumpCommand extends ContainerAwareCommand
                             } else {
                                 $trade->setState(Trade::STATE_OPEN);
                                 $app->addTrade($trade);
-                                $logs[] = new Log("Placed Market Buy for " . $trade->getBasicToken() . "/" . $trade->getToken() . " at price " . sprintf("%.8f", $trade->getPrice()->getBuy()), Log::LOG_LEVEL_INFO);
                             }
                         } else {
                             $trade->setState(Trade::STATE_OPEN);
                             $app->addTrade($trade);
-                            $logs[] = new Log("Placed Market Buy for ".$trade->getBasicToken() ."/". $trade->getToken(), Log::LOG_LEVEL_INFO);
                         }
+
                         unset($trade);
                     }
                 }
