@@ -184,14 +184,7 @@ class PumpCommand extends ContainerAwareCommand
                 }
 
             }
-            if (count($events) > 0) {
-                /** @var Event $event */
-                $app->getJink()->postEvents($events);
-                foreach ($events as $event) {
-                    unset($event);
-                }
-                $events = [];
-            }
+
             if (count($logs) > 0) {
                 /** @var Log $l */
                 $app->getJink()->postLogs($logs);
