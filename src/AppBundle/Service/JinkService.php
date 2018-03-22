@@ -189,79 +189,32 @@ class JinkService
         return false;
     }
 
-    /**
-     * @param Event $event
-     * @return bool
-     */
-    public function postHistoryEvent(Event $event): bool
-    {
-        $body = json_encode([
-            'action' => $event->getAction(),
-            'basic_token' => $event->getBasicToken(),
-            'token' => $event->getToken(),
-            'price' => $event->getPrice(),
-            'profit' => $event->getProfit(),
-            'timestamp' => $event->getCreatedAt()->format("Y-m-d H:i:s")
-        ]);
-        try {
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $this->apiUrl .'event?client_id='.$this->getClientId());
-            curl_setopt($ch, CURLOPT_POST, 1);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-            curl_setopt($ch, CURLOPT_HTTPPROXYTUNNEL, true);
-            curl_setopt(
-                $ch,
-                CURLOPT_HTTPHEADER,
-                [
-                    'Content-Type: application/json',
-                    'accept: application/json',
-                    'charset=utf-8',
-                    $this::TOKEN_PARAM_NAME.': '.$this->getApiKey(),
-                    'production: '.($this->isProduction()?'1':'0')
-                ]
-            );
-
-            $result = curl_exec($ch);
-            if ($result === false) {
-                throw new \Exception(curl_error($ch), curl_errno($ch));
-            }
-            if (curl_getinfo($ch, CURLINFO_HTTP_CODE) === $this::HTTP_OK) {
-                return true;
-            }
-        } catch (\Exception $e) {
-            echo $e->getMessage();
-        }
-
-        return false;
-    }
 
     /**
-     * @param array $history
+     * @param array $events
      * @return bool
      */
-    public function postHistory(array $history): bool
+    public function postEvents(array $events): bool
     {
         $body = [];
-        /** @var Event $h */
-        foreach ($history as $h) {
+        /** @var Event $e */
+        foreach ($events as $e) {
             $event = [];
-            $event['action'] = $h->getAction();
-            $event['basic_token'] = $h->getBasicToken();
-            $event['token'] = $h->getToken();
-            $event['price'] = $h->getPrice();
-            $event['profit'] = $h->getProfit();
-            $event['timestamp'] = $h->getCreatedAt()->format("Y-m-d H:i:s");
+            $event['action'] = $e->getAction();
+            $event['basic_token'] = $e->getTrade()->getBasicToken();
+            $event['token'] = $e->getTrade()->getToken();
+            $event['price'] = ($e->getAction()==Event::ACTION_BUY?$e->getTrade()->getPrice()->getBuy():$e->getTrade()->getPrice()->getCurrent());
+            $event['profit'] = $e->getTrade()->getCurrent()->getProfit();
+            $event['signal'] = $e->getTrade()->getSignal();
+            $event['timestamp'] = $e->getCreatedAt()->format("Y-m-d H:i:s");
             $body[] = $event;
         }
-        unset($history);
+        unset($events);
         $body = json_encode($body);
+
         try {
             $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $this->apiUrl .'history?client_id='.$this->getClientId());
+            curl_setopt($ch, CURLOPT_URL, $this->apiUrl .'events?client_id='.$this->getClientId());
             curl_setopt($ch, CURLOPT_POST, 1);
             curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
             curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
@@ -282,6 +235,7 @@ class JinkService
             );
 
             $result = curl_exec($ch);
+
             if ($result === false) {
                 throw new \Exception(curl_error($ch), curl_errno($ch));
             }

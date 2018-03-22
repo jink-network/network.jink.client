@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 namespace AppBundle\Entity;
+use AppBundle\Command\Trader\Trade\Trade;
 
 /**
  * Class Event
@@ -15,17 +16,8 @@ class Event {
     /** @var string */
     private $action;
 
-    /** @var string */
-    private $basicToken;
-
-    /** @var string */
-    private $token;
-
-    /** @var float */
-    private $price;
-
-    /** @var float|null */
-    private $profit;
+    /** @var Trade */
+    private $trade;
 
     /** @var \DateTime */
     private $createdAt;
@@ -33,18 +25,12 @@ class Event {
     /**
      * Event constructor.
      * @param $action
-     * @param $basicToken
-     * @param $token
-     * @param $price
-     * @param null $profit
+     * @param $trade
      */
-    public function __construct($action, $basicToken, $token, $price, $profit = null)
+    public function __construct($action, Trade $trade)
     {
-        $this->action = $action;
-        $this->basicToken = $basicToken;
-        $this->token = $token;
-        $this->price = $price;
-        $this->profit = $profit;
+        $this->setAction($action);
+        $this->setTrade($trade);
         $this->setCreatedAt(new \DateTime());
     }
 
@@ -66,68 +52,21 @@ class Event {
     }
 
     /**
-     * @return string
+     * @return Trade
      */
-    public function getBasicToken(): string
+    public function getTrade(): Trade
     {
-        return $this->basicToken;
+        return $this->trade;
     }
 
     /**
-     * @param string $basicToken
+     * @param Trade $trade
      */
-    public function setBasicToken(string $basicToken): void
+    public function setTrade(Trade $trade): void
     {
-        $this->basicToken = $basicToken;
+        $this->trade = $trade;
     }
 
-    /**
-     * @return string
-     */
-    public function getToken(): string
-    {
-        return $this->token;
-    }
-
-    /**
-     * @param string $token
-     */
-    public function setToken(string $token): void
-    {
-        $this->token = $token;
-    }
-
-    /**
-     * @return float
-     */
-    public function getPrice(): float
-    {
-        return $this->price;
-    }
-
-    /**
-     * @param float $price
-     */
-    public function setPrice(float $price): void
-    {
-        $this->price = $price;
-    }
-
-    /**
-     * @return float|null
-     */
-    public function getProfit(): ?float
-    {
-        return $this->profit;
-    }
-
-    /**
-     * @param float|null $profit
-     */
-    public function setProfit(?float $profit): void
-    {
-        $this->profit = $profit;
-    }
 
     /**
      * @return \DateTime

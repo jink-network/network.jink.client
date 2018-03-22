@@ -96,12 +96,13 @@ class PumpCommand extends ContainerAwareCommand
                             $interval = $now->diff($trade->getTimestamp());
 
                             $logs[] = new Log("Placed Market Sell for " . $trade->getBasicToken() . "/" . $trade->getToken() . " with ".$trade->getCurrent()->getProfit()."% profit [Dump: ".$trade->getCurrent()->getDump()."%] after ".$interval->format("%h hours %i minutes"), Log::LOG_LEVEL_INFO);
-                            $events[] = new Event(Event::ACTION_SELL, $trade->getBasicToken(), $trade->getToken(), $trade->getPrice()->getCurrent(), $trade->getCurrent()->getProfit());
+                            $events[] = new Event(Event::ACTION_SELL, $trade);
 
                             if ($app->isProduction() && !isset($result['orderId'])) {
                                 $trade->setState(Trade::STATE_ERROR);
                                 $logs[] = new Log("Error while selling pair " . $trade->getBasicToken() . "/" . $trade->getToken().": ".$result['msg'], Log::LOG_LEVEL_ERROR);
                             }
+
                         }
                     }
                 }
@@ -110,7 +111,7 @@ class PumpCommand extends ContainerAwareCommand
                     $logs[] = new Log("Closing trades on ".$trade->getToken(), Log::LOG_LEVEL_INFO);
                     if (count($events) > 0) {
                         /** @var Event $event */
-                        $app->getJink()->postHistory($events);
+                        $app->getJink()->postEvents($events);
                         foreach ($events as $event) {
                             unset($event);
                         }
@@ -140,6 +141,7 @@ class PumpCommand extends ContainerAwareCommand
 
                         $trade = new Trade();
                         $trade->setBasicToken($basicToken);
+                        $trade->setSignal($signal);
 
                         $trade->setToken($token);
                         $trade->setAmount((float)$tokenAmount);
@@ -159,7 +161,6 @@ class PumpCommand extends ContainerAwareCommand
                         $trade->setExchangeFilters($app->getExchangeFiltersTokenPair($trade->getTokenPair()));
 
                         $logs[] = new Log("Placing Market Buy for " . $trade->getBasicToken() . "/" . $trade->getToken() . " at price " . sprintf("%.8f", $trade->getPrice()->getBuy()), Log::LOG_LEVEL_INFO);
-                        $events[] = new Event(Event::ACTION_BUY, $trade->getBasicToken(), $trade->getToken(), $trade->getPrice()->getBuy());
 
                         if ($app->isProduction()) {
                             $result = $trade->buyMarket($app->getBinance());
@@ -176,13 +177,21 @@ class PumpCommand extends ContainerAwareCommand
                             $trade->setState(Trade::STATE_OPEN);
                             $app->addTrade($trade);
                         }
+                        $events[] = new Event(Event::ACTION_BUY, $trade);
 
                         unset($trade);
                     }
                 }
 
             }
-
+            if (count($events) > 0) {
+                /** @var Event $event */
+                $app->getJink()->postEvents($events);
+                foreach ($events as $event) {
+                    unset($event);
+                }
+                $events = [];
+            }
             if (count($logs) > 0) {
                 /** @var Log $l */
                 $app->getJink()->postLogs($logs);

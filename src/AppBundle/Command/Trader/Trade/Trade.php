@@ -51,6 +51,9 @@ class Trade {
     /** @var int */
     private $state;
 
+    /** @var array */
+    private $signal;
+
     /**
      * @return \DateTime
      */
@@ -235,6 +238,22 @@ class Trade {
     public function setState(int $state): void
     {
         $this->state = $state;
+    }
+
+    /**
+     * @return array
+     */
+    public function getSignal(): array
+    {
+        return $this->signal;
+    }
+
+    /**
+     * @param array $signal
+     */
+    public function setSignal(array $signal): void
+    {
+        $this->signal = $signal;
     }
 
 
