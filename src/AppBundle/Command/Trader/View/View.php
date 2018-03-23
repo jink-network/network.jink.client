@@ -7,6 +7,7 @@ use AppBundle\Command\Trader\Trade\Trade;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\Process\Process;
 
 /**
  * Class View
@@ -94,68 +95,70 @@ class View {
         $this->io = new SymfonyStyle($input, $output);
     }
 
+    /**
+     * @param App $app
+     * @param Trade $trade
+     */
+    public function renderTradingView(App $app, Trade $trade) {
+        $this->getOutput()->write(sprintf("\033\143"));
+        $this->getIo()->title('[JiNK] Client'.(!$app->isProduction()?' [dev]':''));
+
+        $this->getIo()->section('Application settings:');
+        $this->getIo()->text('Profit limit: '.$trade->getLimit()->getProfit().'%');
+        $this->getIo()->text('Dump limit:   '.$trade->getLimit()->getDump().'% [Triggers only with positive profit]');
+        $this->getIo()->text('Loss limit:   '.$trade->getLimit()->getLoss().'%');
+        $this->getIo()->text('Time limit:   '.$trade->getLimit()->getTime().'min');
+        $this->getIo()->newLine(1);
+
+        $this->getIo()->section('Token: '.$trade->getToken().'/'.$trade->getBasicToken().' ['.$trade->getBuyTokenAmount().' '.$trade->getToken().']');
+
+        $this->getIo()->text('Your price:    '.sprintf('%.8f', $trade->getPrice()->getBuy()));
+        if ($trade->getPrice()->getCurrent() >= $trade->getPrice()->getLast()) {
+            $this->getIo()->text('Current price: <fg=green>'.sprintf('%.8f', $trade->getPrice()->getCurrent()).'</>');
+        } else {
+            $this->getIo()->text('Current price: <fg=red>'.sprintf('%.8f', $trade->getPrice()->getCurrent()).'</>');
+        }
+        $this->getIo()->text('Maximum price: '.sprintf('%.8f',$trade->getPrice()->getMax()));
+        $this->getIo()->newLine(1);
+
+        if ($trade->getCurrent()->getProfit() >= 0) {
+            $this->getIo()->text('Current profit: <fg=green> '.$trade->getCurrent()->getProfit().'% </> '.$this->paintCertainty($trade->getCertainty()->getProfit()));
+        } else {
+            $this->getIo()->text('Current profit: <fg=red> '.$trade->getCurrent()->getProfit().'% </> '.$this->paintCertainty($trade->getCertainty()->getLoss()));
+        }
+
+        $this->getIo()->text('Current dump:   <fg=red> '.$trade->getCurrent()->getDump().'% </> '.$this->paintCertainty($trade->getCertainty()->getDump()));
+        $this->getIo()->newLine(2);
+
+    }
 
     /**
      * @param App $app
      */
-    public function renderView(App $app) {
+    public function renderClientView(App $app) {
         $this->getOutput()->write(sprintf("\033\143"));
         $this->getIo()->title('[JiNK] Client'.(!$app->isProduction()?' [dev]':''));
         if ($app->isTrading()) {
-            $this->renderViewTrading($app);
+            $this->renderClientViewTrading($app);
         } else {
-            $this->renderViewWaiting($app);
+            $this->renderClientViewWaiting($app);
         }
     }
 
     /**
      * @param App $app
      */
-    public function renderViewTrading(App $app) {
-
-        $this->getIo()->section('Application settings:');
-        $this->getIo()->text('Profit limit: '.$app->getLimit()->getProfit().'%');
-        $this->getIo()->text('Dump limit:   '.$app->getLimit()->getDump().'% [Triggers only with positive profit]');
-        $this->getIo()->text('Loss limit:   '.$app->getLimit()->getLoss().'%');
-        $this->getIo()->text('Time limit:   '.$app->getLimit()->getTime().'min');
-        $this->getIo()->newLine(1);
-
-        /** @var Trade $trade */
-        foreach ($app->getTrades() as $trade) {
-            $this->getIo()->section('Token: '.$trade->getToken().'/'.$trade->getBasicToken().' ['.$trade->getBuyTokenAmount().' '.$trade->getToken().']');
-
-            $this->getIo()->text('Your price:    '.sprintf('%.8f', $trade->getPrice()->getBuy()));
-            if ($trade->getPrice()->getCurrent() >= $trade->getPrice()->getLast()) {
-                $this->getIo()->text('Current price: <fg=green>'.sprintf('%.8f', $trade->getPrice()->getCurrent()).'</>');
-            } else {
-                $this->getIo()->text('Current price: <fg=red>'.sprintf('%.8f', $trade->getPrice()->getCurrent()).'</>');
-            }
-            $this->getIo()->text('Maximum price: '.sprintf('%.8f',$trade->getPrice()->getMax()));
-            $this->getIo()->newLine(1);
-
-            if ($trade->getState() === Trade::STATE_OPEN) {
-                if ($trade->getCurrent()->getProfit() >= 0) {
-                    $this->getIo()->text('Current profit: <fg=green> '.$trade->getCurrent()->getProfit().'% </> '.$this->paintCertainty($trade->getCertainty()->getProfit()));
-                } else {
-                    $this->getIo()->text('Current profit: <fg=red> '.$trade->getCurrent()->getProfit().'% </> '.$this->paintCertainty($trade->getCertainty()->getLoss()));
-                }
-
-                $this->getIo()->text('Current dump:   <fg=red> '.$trade->getCurrent()->getDump().'% </> '.$this->paintCertainty($trade->getCertainty()->getDump()));
-                $this->getIo()->newLine(2);
-
-            } elseif ($trade->getState() === Trade::STATE_CLOSED) {
-                $this->getIo()->success('Sold with '.$trade->getCurrent()->getProfit().'% profit [Dump: '.$trade->getCurrent()->getDump().'%]');
-            } else {
-                $this->getIo()->error('Error with pair '.$trade->getBasicToken().'/'.$trade->getToken());
-            }
-
+    public function renderClientViewTrading(App $app) {
+        /** @var Process $process */
+        foreach ($app->getProcesses() as $process) {
+            $this->getIo()->text('Process ID '.$process->getPid().' is running ...');
         }
     }
 
     /**
      * @param App $app
      */
-    public function renderViewWaiting(App $app) {
+    public function renderClientViewWaiting(App $app) {
         $this->getIo()->section('Waiting for signal...');
     }
 }

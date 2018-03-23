@@ -36,17 +36,20 @@ class JinkService
      * @param $jinkApiUrl
      * @param $clientId
      * @param $production
+     * @param string|null $jinkClientId
      */
-    public function __construct($jinkApiKey, $jinkApiUrl, $clientId, $production)
+    public function __construct($jinkApiKey, $jinkApiUrl, $clientId, $production, string $jinkClientId = null)
     {
         $this->apiKey = $jinkApiKey;
         $this->apiUrl = $jinkApiUrl;
         $this->clientId = $clientId;
         $this->setProductionMode($production);
 
-        $this->registerClient();
-        $log = new Log("Registered new device ID: ".$this->getClientId(), Log::LOG_LEVEL_INFO);
-        $this->postLog($log);
+        if (!$jinkClientId) {
+            $this->registerClient();
+            $log = new Log("Registered new client ID: " . $this->getClientId(), Log::LOG_LEVEL_INFO);
+            $this->postLog($log);
+        }
     }
 
     /**

@@ -39,6 +39,9 @@ class Trade {
     /** @var Current */
     private $current;
 
+    /** @var Limit */
+    private $limit;
+
     /** @var Price */
     private $price;
 
@@ -167,6 +170,24 @@ class Trade {
         $this->current = $current;
     }
 
+
+    /**
+     * @return Limit
+     */
+    public function getLimit(): Limit
+    {
+        return $this->limit;
+    }
+
+    /**
+     * @param Limit $limit
+     */
+    public function setLimit(Limit $limit): void
+    {
+        $this->limit = $limit;
+    }
+
+
     /**
      * @return Price
      */
@@ -263,6 +284,7 @@ class Trade {
         $this->setCurrent(new Current());
         $this->setCertainty(new Certainty());
         $this->setPrice(new Price());
+        $this->setLimit(new Limit());
         $this->setState($this::STATE_PENDING);
     }
 
@@ -315,18 +337,17 @@ class Trade {
     }
 
     /**
-     * @return bool|float
-     */
     public function roundTokenAmount($tokenAmount) {
-        for ($i=5; $i>=0; $i--) {
-            $tokenAmount = $this->roundDown($tokenAmount, $i);
-            $exchangeFilters = $this->getExchangeFilters();
-
-            if ($tokenAmount >= $exchangeFilters['minQty']
-                && $tokenAmount <= $exchangeFilters['maxQty']
-                && ($this->fmodRound($tokenAmount - $exchangeFilters['minQty'], (float)$exchangeFilters['stepSize']) == 0)) {
-                return $tokenAmount;
-            }
+        $exchangeFilters = $this->getExchangeFilters();
+        $i = $exchangeFilters['stepSize'];
+        $j=1;
+        while ($i!=1) {
+            $i*=10; $j++;
+        }
+        $tokenAmount = $this->roundDown($tokenAmount, $j);
+        if ($tokenAmount >= $exchangeFilters['minQty']
+            && $tokenAmount <= $exchangeFilters['maxQty']) {
+            return $tokenAmount;
         }
         return false;
     }
@@ -352,7 +373,7 @@ class Trade {
 
         $buyTokenAmount = $this->roundTokenAmount($this->getBuyTokenAmount());
         if (!$buyTokenAmount) {
-            return ['msg' => 'Invalid amount to Buy: '.$this->getBuyTokenAmount().', rounded to 0'];
+            return 'Invalid amount to Buy: '.$this->getBuyTokenAmount().', rounded to 0';
         }
         $result = $binance->marketBuy($this->getTokenPair(), $buyTokenAmount);
 
@@ -374,7 +395,7 @@ class Trade {
         $sellTokenAmount = $this->roundTokenAmount($sellTokenAmount);
 
         if (!$sellTokenAmount) {
-            return ['msg' => 'Invalid amount to Sell: '.$this->getBuyTokenAmount().', rounded to 0'];
+            return 'Invalid amount to Sell: '.$this->getBuyTokenAmount().', rounded to 0';
         }
         $result = $binance->marketSell($this->getTokenPair(), $sellTokenAmount);
 
@@ -396,9 +417,10 @@ class Trade {
     }
 
     /**
-     * @param Limit $limits
+     * checkLimits
      */
-    public function checkLimits(Limit $limits) {
+    public function checkLimits() {
+        $limits = $this->getLimit();
         // sell as success
         if ($this->getCurrent()->getProfit() >= $limits->getProfit()) {
             $this->getCertainty()->setProfit($this->getCertainty()->getProfit()+1);
@@ -434,7 +456,7 @@ class Trade {
 
             $this->setState(Trade::STATE_CLOSED);
             if ($isProduction) {
-                return $this->sellMarket($binance);
+                return ['msg' => $this->sellMarket($binance)];
             }
             return [];
         }
@@ -442,11 +464,13 @@ class Trade {
     }
 
     /**
-     * @param $timeLimit
      * @param $binance
-     * @return array|bool|mixed
+     * @param $isProduction
+     * @return array|bool
      */
-    public function sellOnTime($timeLimit, $binance, $isProduction) {
+    public function sellOnTime($binance, $isProduction) {
+
+        $timeLimit = $this->getLimit()->getTime();
 
         if ($timeLimit > 0) {
             $now = new \DateTime();
@@ -454,7 +478,7 @@ class Trade {
                 // trigger sale
                 $this->setState(Trade::STATE_CLOSED);
                 if ($isProduction) {
-                    return $this->sellMarket($binance);
+                    return ['msg' => $this->sellMarket($binance)];
                 }
                 return [];
             }

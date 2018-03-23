@@ -2,15 +2,16 @@
 declare(strict_types=1);
 
 namespace AppBundle\Command\Trader;
-use AppBundle\Command\Trader\Model\Limit;
 use AppBundle\Command\Trader\Trade\EmailSignal;
 use AppBundle\Command\Trader\Trade\Trade;
 use AppBundle\Entity\Log;
 use AppBundle\Service\JinkService;
-use PhpImap\Mailbox;
 use Ramsey\Uuid\Uuid;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\Process\Exception\ProcessFailedException;
+use Symfony\Component\Process\PhpProcess;
+use Symfony\Component\Process\Process;
 
 /**
  * Class App
@@ -22,9 +23,15 @@ class App
      *
      */
     const BASIC_TOKENS = ['ETH', 'BTC'];
-    const INTERVAL_TIME = 500;
+    const INTERVAL_TIME = 1000;
+    const PROCESS_LIMIT = 10;
     const CERTAINTY_LIMIT = 3;
 
+    /** @var string */
+    private $binaneApiKey;
+
+    /** @var string */
+    private $binaneApiSecret;
 
     /** @var \Binance\API */
     private $binance;
@@ -53,14 +60,11 @@ class App
     /** @var integer */
     private $intervalTime;
 
-    /** @var Limit */
-    private $limit;
-
     /** @var array */
     private $binanceBalances;
 
     /** @var array */
-    private $trades;
+    private $processes;
 
     /**
      * App constructor.
@@ -69,23 +73,30 @@ class App
      * @param $apiKey
      * @param $apiSecret
      * @param $dev
+     * @param string|null $jinkClientId
      */
-    public function __construct($jinkApiKey, $jinkApiUrl, $apiKey, $apiSecret, $dev)
+    public function __construct($jinkApiKey, $jinkApiUrl, $apiKey, $apiSecret, $dev, string $jinkClientId = null)
     {
+        $this->setProcesses([]);
         $this->setCertaintyLimit($this::CERTAINTY_LIMIT);
         $this->setIntervalTime($this::INTERVAL_TIME);
         $this->setProductionMode(!(bool)$dev);
 
-        $this->setClientId(Uuid::uuid4()->toString());
-        $this->setLimit(new Limit());
+        if (!$jinkClientId) {
+            $this->setClientId(Uuid::uuid4()->toString());
+        } else {
+            $this->setClientId($jinkClientId);
+        }
 
         /* Set up JiNK */
         $this->setJinkApiKey($jinkApiKey);
         $this->setJinkApiUrl($jinkApiUrl);
-        $this->setJink(new JinkService($jinkApiKey, $jinkApiUrl, $this->getClientId(), $this->isProduction()));
+        $this->setJink(new JinkService($jinkApiKey, $jinkApiUrl, $this->getClientId(), $this->isProduction(), $jinkClientId));
 
         /* Set up Binance */
-        $this->setBinance(new \Binance\API($apiKey, $apiSecret));
+        $this->setBinaneApiKey($apiKey);
+        $this->setBinaneApiSecret($apiSecret);
+        $this->setBinance(new \Binance\API($apiKey, $apiSecret, ['useServerTime'=>true]));
 
         $this->resetApp();
     }
@@ -94,8 +105,6 @@ class App
      * Reset App
      */
     public function resetApp() {
-        $this->setTrades([]);
-        $this->setLimit(new Limit());
 
         $balances = $this->getBinance()->balances();
         if (!$balances) {
@@ -131,6 +140,38 @@ class App
     public function isProduction()
     {
         return $this->productionMode;
+    }
+
+    /**
+     * @return string
+     */
+    public function getBinaneApiKey(): string
+    {
+        return $this->binaneApiKey;
+    }
+
+    /**
+     * @param string $binaneApiKey
+     */
+    public function setBinaneApiKey(string $binaneApiKey): void
+    {
+        $this->binaneApiKey = $binaneApiKey;
+    }
+
+    /**
+     * @return string
+     */
+    public function getBinaneApiSecret(): string
+    {
+        return $this->binaneApiSecret;
+    }
+
+    /**
+     * @param string $binaneApiSecret
+     */
+    public function setBinaneApiSecret(string $binaneApiSecret): void
+    {
+        $this->binaneApiSecret = $binaneApiSecret;
     }
 
     /**
@@ -273,22 +314,6 @@ class App
     }
 
     /**
-     * @return Limit
-     */
-    public function getLimit(): Limit
-    {
-        return $this->limit;
-    }
-
-    /**
-     * @param Limit $limit
-     */
-    public function setLimit(Limit $limit): void
-    {
-        $this->limit = $limit;
-    }
-
-    /**
      * @return array
      */
     public function getBinanceBalances(): array
@@ -307,25 +332,77 @@ class App
     /**
      * @return array|null
      */
-    public function getTrades()
+    public function getProcesses()
     {
-        return $this->trades;
+        return $this->processes;
     }
 
     /**
-     * @param array $trades
+     * @param array $processes
      */
-    public function setTrades(array $trades): void
+    public function setProcesses(array $processes): void
     {
-        $this->trades = $trades;
+        $this->processes = $processes;
+    }
+
+    /**
+     * @param Process $process
+     */
+    public function addProcess(Process $process) : void
+    {
+        $this->processes[] = $process;
+    }
+
+    /**
+     * @param Process $process
+     */
+    public function removeProcess(Process $process) : void
+    {
+        /**
+         * @var int $key
+         * @var Process $p
+         */
+        foreach ($this->getProcesses() as $key => $p) {
+            if ($p->getPid() == $process->getPid()) {
+                unset($this->processes[$key]);
+            }
+        }
+    }
+
+    /**
+     * @param Trade $t
+     * @return string
+     */
+    public function prepareTradeProcess($t) {
+        $trade['basicToken'] = $t->getBasicToken();
+        $trade['token'] = $t->getToken();
+        $trade['limit']['profit'] = $t->getLimit()->getProfit();
+        $trade['limit']['dump'] = $t->getLimit()->getDump();
+        $trade['limit']['loss'] = $t->getLimit()->getLoss();
+        $trade['limit']['time'] = $t->getLimit()->getTime();
+        $trade['price']['buy'] = $t->getPrice()->getBuy();
+        $trade['signal'] = $t->getSignal();
+        $trade['buyTokenAmount'] = $t->getBuyTokenAmount();
+        $trade['amount'] = $t->getAmount();
+        $trade['exchangeFilters'] = $t->getExchangeFilters();
+
+        $command = 'bin/console jink:trade '.$this->getBinaneApiKey().' '.$this->getBinaneApiSecret().' '.$this->getJinkApiUrl().' '.$this->getJinkApiKey().' '.$this->getClientId();
+        $command .= ' \''.json_encode($trade).'\'';
+
+        if (!$this->isProduction()) {
+            $command .= ' --dev';
+        }
+        return $command;
     }
 
     /**
      * @param Trade $trade
      */
-    public function addTrade(Trade $trade) : void
-    {
-        $this->trades[] = $trade;
+    public function setTradeProcess(Trade $trade) {
+        $process = new Process($this->prepareTradeProcess($trade));
+        $process->start();
+
+        $this->addProcess($process);
     }
 
     /**
@@ -365,38 +442,11 @@ class App
     }
 
     /**
-     * calculate state for each trade
-     */
-    public function calculateCurrentState() {
-        /** @var Trade $trade */
-        foreach ($this->getTrades() as $trade) {
-            if ($trade->isOpen()) {
-                $trade->calculateCurrentState($this->getBinance());
-            }
-        }
-    }
-
-    /**
-     * check limits for each trade
-     */
-    public function checkLimits() {
-        /** @var Trade $trade */
-        foreach ($this->getTrades() as $trade) {
-            if ($trade->isOpen()) {
-                $trade->checkLimits($this->getLimit());
-            }
-        }
-    }
-
-    /**
      * check if trading is done
      */
     public function isTrading() {
-        /** @var Trade $trade */
-        foreach ($this->getTrades() as $trade) {
-            if ($trade->isOpen()) {
-                return true;
-            }
+        if (count($this->getProcesses()) > 0) {
+            return true;
         }
         return false;
     }
