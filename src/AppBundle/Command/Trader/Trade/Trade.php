@@ -337,6 +337,9 @@ class Trade {
     }
 
     /**
+     * @param $tokenAmount
+     * @return bool|float|int
+     */
     public function roundTokenAmount($tokenAmount) {
         $exchangeFilters = $this->getExchangeFilters();
         $i = $exchangeFilters['stepSize'];
