@@ -2,15 +2,10 @@
 declare(strict_types=1);
 
 namespace AppBundle\Command\Trader;
-use AppBundle\Command\Trader\Trade\EmailSignal;
 use AppBundle\Command\Trader\Trade\Trade;
 use AppBundle\Entity\Log;
 use AppBundle\Service\JinkService;
 use Ramsey\Uuid\Uuid;
-use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\Console\Style\SymfonyStyle;
-use Symfony\Component\Process\Exception\ProcessFailedException;
-use Symfony\Component\Process\PhpProcess;
 use Symfony\Component\Process\Process;
 
 /**
