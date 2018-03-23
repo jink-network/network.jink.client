@@ -376,7 +376,7 @@ class Trade {
 
         $buyTokenAmount = $this->roundTokenAmount($this->getBuyTokenAmount());
         if (!$buyTokenAmount) {
-            return 'Invalid amount to Buy: '.$this->getBuyTokenAmount().', rounded to 0';
+            return ['msg' => 'Invalid amount to Buy: '.$this->getBuyTokenAmount().', rounded to 0'];
         }
         $result = $binance->marketBuy($this->getTokenPair(), $buyTokenAmount);
 
@@ -398,7 +398,7 @@ class Trade {
         $sellTokenAmount = $this->roundTokenAmount($sellTokenAmount);
 
         if (!$sellTokenAmount) {
-            return 'Invalid amount to Sell: '.$this->getBuyTokenAmount().', rounded to 0';
+            return ['msg' => 'Invalid amount to Sell: '.$this->getBuyTokenAmount().', rounded to 0'];
         }
         $result = $binance->marketSell($this->getTokenPair(), $sellTokenAmount);
 
