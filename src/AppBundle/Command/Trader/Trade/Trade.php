@@ -459,7 +459,7 @@ class Trade {
 
             $this->setState(Trade::STATE_CLOSED);
             if ($isProduction) {
-                return ['msg' => $this->sellMarket($binance)];
+                return $this->sellMarket($binance);
             }
             return [];
         }
@@ -481,7 +481,7 @@ class Trade {
                 // trigger sale
                 $this->setState(Trade::STATE_CLOSED);
                 if ($isProduction) {
-                    return ['msg' => $this->sellMarket($binance)];
+                    return $this->sellMarket($binance);
                 }
                 return [];
             }
