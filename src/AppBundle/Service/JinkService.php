@@ -205,6 +205,7 @@ class JinkService
             $event = [];
             $event['action'] = $e->getAction();
             $event['basic_token'] = $e->getTrade()->getBasicToken();
+            $event['amount'] = $e->getTrade()->getAmount();
             $event['token'] = $e->getTrade()->getToken();
             $event['price'] = ($e->getAction()==Event::ACTION_BUY?$e->getTrade()->getPrice()->getBuy():$e->getTrade()->getPrice()->getCurrent());
             $event['profit'] = $e->getTrade()->getCurrent()->getProfit();
