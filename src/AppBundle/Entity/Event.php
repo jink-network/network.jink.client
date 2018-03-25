@@ -13,6 +13,9 @@ class Event {
     const ACTION_BUY = 'buy';
     const ACTION_SELL = 'sell';
 
+    const STATE_TO_CANCEL = 'cancel';
+    const STATE_TO_SELL = 'sell';
+
     /** @var string */
     private $action;
 

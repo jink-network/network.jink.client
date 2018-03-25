@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 namespace AppBundle\Service;
+use AppBundle\Command\Trader\Trade\Trade;
 use AppBundle\Entity\Event;
 use AppBundle\Entity\Log;
 
@@ -250,6 +251,51 @@ class JinkService
             echo $e->getMessage();
         }
 
+        return false;
+    }
+
+    /**
+     * @param Trade $trade
+     * @return bool|mixed
+     */
+    public function getEventState(Trade $trade)
+    {
+        $signal = $trade->getSignal();
+        try {
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $this->apiUrl .'event/state?client_id='.$this->getClientId().'&signal_id='.$signal['signal']['id'].'&token='.$trade->getToken().'&basic_token='.$trade->getBasicToken());
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'GET');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_HTTPPROXYTUNNEL, true);
+            curl_setopt(
+                $ch,
+                CURLOPT_HTTPHEADER,
+                [
+                    $this::TOKEN_PARAM_NAME.': '.$this->getApiKey(),
+                    'production: '.($this->isProduction()?'1':'0')
+                ]
+            );
+            $result = curl_exec($ch);
+
+            if ($result === false) {
+                throw new \Exception(curl_error($ch), curl_errno($ch));
+            }
+
+            if (curl_getinfo($ch, CURLINFO_HTTP_CODE) === $this::HTTP_OK) {
+                curl_close($ch);
+                unset($ch);
+                $result = json_decode($result, true);
+                if (isset($result['state'])) {
+                    return $result['state'];
+                }
+                return false;
+            }
+        } catch (\Exception $e) {
+            echo $e->getMessage();
+        }
+        unset($ch);
         return false;
     }
 

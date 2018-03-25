@@ -488,4 +488,28 @@ class Trade {
         }
         return false;
     }
+
+    /**
+     * @param $binance
+     * @param $isProduction
+     * @return array|bool|mixed
+     */
+    public function sellOnRequest($binance, $isProduction) {
+
+        $this->setState(Trade::STATE_CLOSED);
+        if ($isProduction) {
+            return $this->sellMarket($binance);
+        }
+        return [];
+
+    }
+
+    /**
+     * @param $isProduction
+     * @return bool
+     */
+    public function cancelOnRequest($isProduction) {
+        $this->setState(Trade::STATE_CLOSED);
+        return false;
+    }
 }

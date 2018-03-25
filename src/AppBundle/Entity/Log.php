@@ -13,7 +13,7 @@ class Log {
     const LOG_LEVEL_INFO = 'info';
     const LOG_LEVEL_ERROR = 'error';
 
-    const LOG_HEARTBEAT_INTERVAL = 120;
+    const LOG_HEARTBEAT_INTERVAL = 120;  //~s
 
     /** @var string */
     private $text;

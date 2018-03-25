@@ -18,7 +18,8 @@ class App
      *
      */
     const BASIC_TOKENS = ['ETH', 'BTC'];
-    const INTERVAL_TIME = 500;
+    const INTERVAL_TIME = 500; // ms
+    const EVENT_STATUS_INTERVAL = 30; //~s
     const PROCESS_LIMIT = 8;
     const CERTAINTY_LIMIT = 3;
 

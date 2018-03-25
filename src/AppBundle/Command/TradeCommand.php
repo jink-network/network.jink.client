@@ -96,37 +96,55 @@ class TradeCommand extends ContainerAwareCommand
         $trade->setBuyTokenAmount($tradeJson['buyTokenAmount']);
         $trade->setExchangeFilters($tradeJson['exchangeFilters']);
 
+        $i = 0;
         while ($trade->isOpen()) {
             $this->logs = [];
             $this->events = [];
+            $now = new \DateTime();
+            $interval = $now->diff($trade->getTimestamp());
 
             $trade->calculateCurrentState($app->getBinance());
             $trade->checkLimits();
 
-            $result = $trade->sellOnLimits($app->getCertaintyLimit(), $app->getBinance(), $app->isProduction());
+            /** Check for limit sell */
+
+            $handleSell = $trade->sellOnLimits($app->getCertaintyLimit(), $app->getBinance(), $app->isProduction());
             if ($trade->isOpen()) {
-                $result = $trade->sellOnTime($app->getBinance(), $app->isProduction());
+                $handleSell = $trade->sellOnTime($app->getBinance(), $app->isProduction());
             }
 
-            if (is_array($result)) {
-                $now = new \DateTime();
-                $interval = $now->diff($trade->getTimestamp());
+            /** Check for user forced actions */
+            if ($trade->isOpen() && $i%App::EVENT_STATUS_INTERVAL == 0) {
+                switch ($app->getJink()->getEventState($trade)) {
+                    case Event::STATE_TO_CANCEL:
+                        $handleSell = $trade->cancelOnRequest($app->isProduction());
+                        $this->logs[] = new Log("Canceling trade " . $trade->getBasicToken() . "/" . $trade->getToken() . " due to user request after ".$interval->format("%h hours %i minutes"), Log::LOG_LEVEL_INFO);
+                        break;
+                    case Event::STATE_TO_SELL:
+                        $handleSell = $trade->sellOnRequest($app->getBinance(), $app->isProduction());
+                        $this->logs[] = new Log("Manually closing trade " . $trade->getBasicToken() . "/" . $trade->getToken() . " due to user request after ".$interval->format("%h hours %i minutes"), Log::LOG_LEVEL_INFO);
+                        break;
+                }
+                $i = 0;
+            }
+
+            if (is_array($handleSell)) {
 
                 $this->logs[] = new Log("Placed Market Sell for " . $trade->getBasicToken() . "/" . $trade->getToken() . " with ".$trade->getCurrent()->getProfit()."% profit [Dump: ".$trade->getCurrent()->getDump()."%] after ".$interval->format("%h hours %i minutes"), Log::LOG_LEVEL_INFO);
                 $this->events[] = new Event(Event::ACTION_SELL, $trade);
 
-                if ($app->isProduction() && !isset($result['orderId'])) {
+                if ($app->isProduction() && !isset($handleSell['orderId'])) {
                     $trade->setState(Trade::STATE_ERROR);
-                    $this->logs[] = new Log("Error while selling pair " . $trade->getBasicToken() . "/" . $trade->getToken().": ".$result['msg'], Log::LOG_LEVEL_ERROR);
+                    $this->logs[] = new Log("Error while selling pair " . $trade->getBasicToken() . "/" . $trade->getToken().": ".$handleSell['msg'], Log::LOG_LEVEL_ERROR);
                 }
 
-            } elseif (!$trade->isOpen()) {
-                $this->logs[] = new Log("Error while selling pair " . $trade->getBasicToken() . "/" . $trade->getToken().": ".$result, Log::LOG_LEVEL_ERROR);
             }
 
             if (!$trade->isOpen()) {
                 $this->logs[] = new Log("Closing trade on ".$trade->getBasicToken() . "/" . $trade->getToken(), Log::LOG_LEVEL_INFO);
             }
+
+            /** Handle logs and sync with API */
 
             if (count($this->logs) > 0) {
                 $app->getJink()->postLogs($this->logs);
@@ -139,7 +157,7 @@ class TradeCommand extends ContainerAwareCommand
                 $view->renderTradingView($app, $trade);
             }
             usleep($app->getIntervalTime() * 1000);
-
+            $i++;
         }
     }
 }
