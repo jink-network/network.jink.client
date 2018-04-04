@@ -139,11 +139,12 @@ class ClientCommand extends ContainerAwareCommand
                         } else {
                             // open new process for this trade
                             $app->setTradeProcess($trade);
+                            $this->events[] = new Event(Event::ACTION_BUY, $trade);
                         }
                     } else {
                         $app->setTradeProcess($trade);
+                        $this->events[] = new Event(Event::ACTION_BUY, $trade);
                     }
-                    $this->events[] = new Event(Event::ACTION_BUY, $trade);
 
                     unset($trade);
                 }
