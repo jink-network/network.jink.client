@@ -25,6 +25,9 @@ class Trade {
     private $token;
 
     /** @var string */
+    private $exchange;
+
+    /** @var string */
     private $basicToken;
 
     /** @var float */
@@ -103,6 +106,22 @@ class Trade {
     public function setBasicToken(string $basicToken): void
     {
         $this->basicToken = $basicToken;
+    }
+
+    /**
+     * @return string
+     */
+    public function getExchange(): string
+    {
+        return $this->exchange;
+    }
+
+    /**
+     * @param string $exchange
+     */
+    public function setExchange(string $exchange): void
+    {
+        $this->exchange = $exchange;
     }
 
     /**

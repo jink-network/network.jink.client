@@ -62,6 +62,9 @@ class App
     /** @var array */
     private $processes;
 
+    /** @var array */
+    private $exchanges;
+
     /**
      * App constructor.
      * @param $jinkApiKey
@@ -366,12 +369,44 @@ class App
     }
 
     /**
+     * @return array
+     */
+    public function getExchanges(): array
+    {
+        return $this->exchanges;
+    }
+
+    /**
+     * @param array $exchanges
+     */
+    public function setExchanges(array $exchanges): void
+    {
+        $this->exchanges = $exchanges;
+    }
+
+    /**
+     * @param string $exchange
+     */
+    public function addExchange(string $exchange) {
+        $this->exchanges[$exchange] = true;
+    }
+
+    /**
+     * @param string $exchange
+     * @return bool
+     */
+    public function getExchange(string $exchange) {
+        return isset($this->exchanges[$exchange]);
+    }
+
+    /**
      * @param Trade $t
      * @return string
      */
     public function prepareTradeProcess($t) {
         $trade['basicToken'] = $t->getBasicToken();
         $trade['token'] = $t->getToken();
+        $trade['exchange'] = $t->getExchange();
         $trade['limit']['profit'] = $t->getLimit()->getProfit();
         $trade['limit']['dump'] = $t->getLimit()->getDump();
         $trade['limit']['loss'] = $t->getLimit()->getLoss();

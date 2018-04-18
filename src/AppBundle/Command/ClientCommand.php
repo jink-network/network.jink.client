@@ -71,13 +71,19 @@ class ClientCommand extends ContainerAwareCommand
             $view->getOutput()->write(sprintf("\033\143"));
         }
 
-        /** If problem with Binance connection -- EXIT */
-        if (empty($app->getBinanceBalances())) {
+        if (!empty($app->getBinanceBalances())) {
+            $app->addExchange('binance');
+        }
+
+        // no exchanges
+        if (count($app->getExchanges()) == 0) {
             return;
         }
 
         $i = 0;
         while (true) {
+            usleep($app->getIntervalTime() * 1000);
+
             $this->logs = [];
             $this->events = [];
 
@@ -90,7 +96,12 @@ class ClientCommand extends ContainerAwareCommand
 
             if (isset($signal['settings'])) {
                 $token = $signal['signal']['token'];
-                $this->logs[] = new Log("New ".$signal['signal']['strength']." signal for ".$token, Log::LOG_LEVEL_INFO);
+                $this->logs[] = new Log("New ".$signal['signal']['strength']." signal for ".$token." on ".$signal['signal']['exchange'], Log::LOG_LEVEL_INFO);
+
+                if (!$app->getExchange($signal['signal']['exchange'])) {
+                    $this->logs[] = new Log("Ignoring signal for ".$token." - exchange ".$signal['signal']['exchange']." not configured", Log::LOG_LEVEL_INFO);
+                    continue;
+                }
 
                 foreach ($signal['settings']['token'] as $basicToken => $tokenAmount) {
                     if (isset($signal['signal']['basicToken']) && $signal['signal']['basicToken'] != $basicToken) {
@@ -109,6 +120,7 @@ class ClientCommand extends ContainerAwareCommand
 
                     $trade->setBasicToken($basicToken);
                     $trade->setSignal($signal);
+                    $trade->setExchange($signal['signal']['exchange']);
 
                     $trade->setToken($token);
                     $trade->setAmount((float)$tokenAmount);
@@ -118,6 +130,7 @@ class ClientCommand extends ContainerAwareCommand
                         $this->logs[] = new Log("No such pair (".$basicToken."/".$token.") on Binance", Log::LOG_LEVEL_ERROR);
                         continue;
                     }
+
                     if ($tokenAmount <= 0) {
                         $this->logs[] = new Log("Ignoring ".$basicToken."/".$token." according to settings", Log::LOG_LEVEL_INFO);
                         continue;
@@ -133,7 +146,7 @@ class ClientCommand extends ContainerAwareCommand
                         $result = $trade->buyMarket($app->getBinance());
 
                         if (!$result) {
-                            $this->logs[] = new Log("Invalid Binance response for setting up order", Log::LOG_LEVEL_ERROR);
+                            $this->logs[] = new Log("Invalid response for setting up order", Log::LOG_LEVEL_ERROR);
                         } elseif (!isset($result['orderId'])) {
                             $this->logs[] = new Log("Error while buying pair " . $trade->getBasicToken() . "/" . $trade->getToken().": ".$result['msg'], Log::LOG_LEVEL_ERROR);
                         } else {
@@ -171,7 +184,6 @@ class ClientCommand extends ContainerAwareCommand
             if (!$app->isProduction()) {
                 $view->renderClientView($app);
             }
-            usleep($app->getIntervalTime() * 1000);
         }
     }
 }
