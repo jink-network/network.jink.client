@@ -95,72 +95,73 @@ class ClientCommand extends ContainerAwareCommand
             $signal = $app->getJink()->getSignal();
 
             if (isset($signal['settings'])) {
-                $token = $signal['signal']['token'];
-                $this->logs[] = new Log("New ".$signal['signal']['strength']." signal for ".$token." on ".$signal['signal']['exchange'], Log::LOG_LEVEL_INFO);
+                if ($app->getExchange($signal['signal']['exchange'])) {
+                    $token = $signal['signal']['token'];
+                    $this->logs[] = new Log("New ".$signal['signal']['strength']." signal for ".$token." on ".$signal['signal']['exchange'], Log::LOG_LEVEL_INFO);
 
-                if (!$app->getExchange($signal['signal']['exchange'])) {
-                    $this->logs[] = new Log("Ignoring signal for ".$token." - exchange ".$signal['signal']['exchange']." not configured", Log::LOG_LEVEL_INFO);
-                    continue;
-                }
+                    foreach ($signal['settings']['token'] as $basicToken => $tokenAmount) {
+                        if (isset($signal['signal']['basicToken']) && $signal['signal']['basicToken'] != $basicToken) {
+                            continue;
+                        }
+                        if (count($app->getProcesses()) >= App::PROCESS_LIMIT) {
+                            $this->logs[] = new Log("Ignoring signal for ".$basicToken."/".$token." - too many running Trades (limit is ".App::PROCESS_LIMIT.")", Log::LOG_LEVEL_ERROR);
+                            continue;
+                        }
 
-                foreach ($signal['settings']['token'] as $basicToken => $tokenAmount) {
-                    if (isset($signal['signal']['basicToken']) && $signal['signal']['basicToken'] != $basicToken) {
-                        continue;
-                    }
-                    if (count($app->getProcesses()) >= App::PROCESS_LIMIT) {
-                        $this->logs[] = new Log("Ignoring signal for ".$basicToken."/".$token." - too many running Trades (limit is ".App::PROCESS_LIMIT.")", Log::LOG_LEVEL_ERROR);
-                        continue;
-                    }
+                        $trade = new Trade();
+                        $trade->getLimit()->setProfit((float)$signal['settings']['limit']['profit']);
+                        $trade->getLimit()->setDump((float)$signal['settings']['limit']['dump']);
+                        $trade->getLimit()->setLoss((float)$signal['settings']['limit']['loss']);
+                        $trade->getLimit()->setTime((int)$signal['settings']['limit']['time']);
 
-                    $trade = new Trade();
-                    $trade->getLimit()->setProfit((float)$signal['settings']['limit']['profit']);
-                    $trade->getLimit()->setDump((float)$signal['settings']['limit']['dump']);
-                    $trade->getLimit()->setLoss((float)$signal['settings']['limit']['loss']);
-                    $trade->getLimit()->setTime((int)$signal['settings']['limit']['time']);
+                        $trade->setBasicToken($basicToken);
+                        $trade->setSignal($signal);
+                        $trade->setExchange($signal['signal']['exchange']);
 
-                    $trade->setBasicToken($basicToken);
-                    $trade->setSignal($signal);
-                    $trade->setExchange($signal['signal']['exchange']);
+                        $trade->setToken($token);
+                        $trade->setAmount((float)$tokenAmount);
 
-                    $trade->setToken($token);
-                    $trade->setAmount((float)$tokenAmount);
+                        $buyPrice = $app->getBinancePrice($trade->getTokenPair());
+                        if (!$buyPrice) {
+                            $this->logs[] = new Log("No such pair (".$basicToken."/".$token.") on Binance", Log::LOG_LEVEL_ERROR);
+                            continue;
+                        }
 
-                    $buyPrice = $app->getBinancePrice($trade->getTokenPair());
-                    if (!$buyPrice) {
-                        $this->logs[] = new Log("No such pair (".$basicToken."/".$token.") on Binance", Log::LOG_LEVEL_ERROR);
-                        continue;
-                    }
+                        if ($tokenAmount <= 0) {
+                            $this->logs[] = new Log("Ignoring ".$basicToken."/".$token." according to settings", Log::LOG_LEVEL_INFO);
+                            continue;
+                        }
 
-                    if ($tokenAmount <= 0) {
-                        $this->logs[] = new Log("Ignoring ".$basicToken."/".$token." according to settings", Log::LOG_LEVEL_INFO);
-                        continue;
-                    }
+                        $trade->getPrice()->setBuy($buyPrice);
+                        $trade->setBuyTokenAmount($trade->getAmount() / $trade->getPrice()->getBuy());
+                        $trade->setExchangeFilters($app->getExchangeFiltersTokenPair($trade->getTokenPair()));
 
-                    $trade->getPrice()->setBuy($buyPrice);
-                    $trade->setBuyTokenAmount($trade->getAmount() / $trade->getPrice()->getBuy());
-                    $trade->setExchangeFilters($app->getExchangeFiltersTokenPair($trade->getTokenPair()));
+                        $this->logs[] = new Log("Placing Market Buy for " . $trade->getBasicToken() . "/" . $trade->getToken() . " at price " . sprintf("%.8f", $trade->getPrice()->getBuy()), Log::LOG_LEVEL_INFO);
 
-                    $this->logs[] = new Log("Placing Market Buy for " . $trade->getBasicToken() . "/" . $trade->getToken() . " at price " . sprintf("%.8f", $trade->getPrice()->getBuy()), Log::LOG_LEVEL_INFO);
+                        if ($app->isProduction()) {
+                            $result = $trade->buyMarket($app->getBinance());
 
-                    if ($app->isProduction()) {
-                        $result = $trade->buyMarket($app->getBinance());
-
-                        if (!$result) {
-                            $this->logs[] = new Log("Invalid response for setting up order", Log::LOG_LEVEL_ERROR);
-                        } elseif (!isset($result['orderId'])) {
-                            $this->logs[] = new Log("Error while buying pair " . $trade->getBasicToken() . "/" . $trade->getToken().": ".$result['msg'], Log::LOG_LEVEL_ERROR);
+                            if (!$result) {
+                                $this->logs[] = new Log("Invalid response for setting up order", Log::LOG_LEVEL_ERROR);
+                            } elseif (!isset($result['orderId'])) {
+                                $this->logs[] = new Log("Error while buying pair " . $trade->getBasicToken() . "/" . $trade->getToken().": ".$result['msg'], Log::LOG_LEVEL_ERROR);
+                            } else {
+                                // open new process for this trade
+                                $app->setTradeProcess($trade);
+                                $this->events[] = new Event(Event::ACTION_BUY, $trade);
+                            }
                         } else {
-                            // open new process for this trade
                             $app->setTradeProcess($trade);
                             $this->events[] = new Event(Event::ACTION_BUY, $trade);
                         }
-                    } else {
-                        $app->setTradeProcess($trade);
-                        $this->events[] = new Event(Event::ACTION_BUY, $trade);
+
+                        unset($trade);
                     }
 
-                    unset($trade);
+                } else {
+                    $this->logs[] = new Log("Ignoring signal on ".$signal['signal']['exchange']." - not configured", Log::LOG_LEVEL_INFO);
                 }
+
             }
 
             /**
