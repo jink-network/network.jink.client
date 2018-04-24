@@ -5,6 +5,8 @@ namespace AppBundle\Command\Trader;
 use AppBundle\Command\Trader\Trade\Trade;
 use AppBundle\Entity\Log;
 use AppBundle\Service\JinkService;
+use codenixsv\Bittrex\BittrexManager;
+use codenixsv\Bittrex\Clients\BittrexClient;
 use Ramsey\Uuid\Uuid;
 use Symfony\Component\Process\Process;
 
@@ -17,6 +19,9 @@ class App
     /**
      *
      */
+    const INFINITE = 1000000000;
+    const STEP_8TH = 0.00000001;
+
     const BASIC_TOKENS = ['ETH', 'BTC'];
     const INTERVAL_TIME = 500; // ms
     const EVENT_STATUS_INTERVAL = 30; //~s
@@ -32,6 +37,27 @@ class App
     /** @var \Binance\API */
     private $binance;
 
+    /** @var array */
+    private $binanceBalances;
+
+    /** @var array */
+    private $binanceExchangeFilters;
+
+    /** @var string */
+    private $bittrexApiKey;
+
+    /** @var string */
+    private $bittrexApiSecret;
+
+    /** @var BittrexClient */
+    private $bittrex;
+
+    /** @var array */
+    private $bittrexBalances;
+
+    /** @var array */
+    private $bittrexExchangeFilters;
+
     /** @var JinkService */
     private $jink;
 
@@ -44,9 +70,6 @@ class App
     /** @var string */
     private $clientId;
 
-    /** @var array */
-    private $exchangeFilters;
-
     /** @var bool */
     private $productionMode;
 
@@ -57,9 +80,6 @@ class App
     private $intervalTime;
 
     /** @var array */
-    private $binanceBalances;
-
-    /** @var array */
     private $processes;
 
     /** @var array */
@@ -67,14 +87,16 @@ class App
 
     /**
      * App constructor.
+     * @param $binanceApiKey
+     * @param $binanceApiSecret
+     * @param $bittrexApiKey
+     * @param $bittrexApiSecret
      * @param $jinkApiKey
      * @param $jinkApiUrl
-     * @param $apiKey
-     * @param $apiSecret
      * @param $dev
      * @param string|null $jinkClientId
      */
-    public function __construct($jinkApiKey, $jinkApiUrl, $apiKey, $apiSecret, $dev, string $jinkClientId = null)
+    public function __construct($binanceApiKey, $binanceApiSecret, $bittrexApiKey, $bittrexApiSecret, $jinkApiKey, $jinkApiUrl, $dev, string $jinkClientId = null)
     {
         $this->setProcesses([]);
         $this->setCertaintyLimit($this::CERTAINTY_LIMIT);
@@ -93,9 +115,14 @@ class App
         $this->setJink(new JinkService($jinkApiKey, $jinkApiUrl, $this->getClientId(), $this->isProduction(), $jinkClientId));
 
         /* Set up Binance */
-        $this->setBinaneApiKey($apiKey);
-        $this->setBinaneApiSecret($apiSecret);
-        $this->setBinance(new \Binance\API($apiKey, $apiSecret, ['useServerTime'=>true]));
+        $this->setBinaneApiKey($binanceApiKey);
+        $this->setBinaneApiSecret($binanceApiSecret);
+        $this->setBinance(new \Binance\API($binanceApiKey, $binanceApiSecret, ['useServerTime'=>true]));
+
+        /* Set up Bittrex */
+        $this->setBittrexApiKey($bittrexApiKey);
+        $this->setBittrexApiSecret($bittrexApiSecret);
+        $this->setBittrex(new BittrexManager($bittrexApiKey, $bittrexApiSecret));
 
         $this->resetApp();
     }
@@ -107,12 +134,22 @@ class App
 
         $balances = $this->getBinance()->balances();
         if (!$balances) {
-            $log = new Log("Invalid Binance credentials, please set up your JiNK bot with correct API Key and API secret",Log::LOG_LEVEL_ERROR);
+            $log = new Log("Invalid Binance credentials - ignoring",Log::LOG_LEVEL_ERROR);
             $this->getJink()->postLog($log);
             $this->setBinanceBalances([]);
         } else {
             $this->setBinanceBalances($balances);
-            $this->setExchangeFilters($this->prepareExchangeInfo());
+            $this->setBinanceExchangeFilters($this->prepareBinanceExchangeInfo());
+        }
+
+        $balances = json_decode($this->getBittrex()->getBalances(), true);
+        if (!$balances['success']) {
+            $log = new Log("Invalid Bittrex credentials - ignoring",Log::LOG_LEVEL_ERROR);
+            $this->getJink()->postLog($log);
+            $this->setBittrexBalances([]);
+        } else {
+            $this->setBittrexBalances($balances);
+            $this->setBittrexExchangeFilters($this->prepareBittrexExchangeInfo());
         }
         $this->getJink()->updateLastSignal();
     }
@@ -241,27 +278,50 @@ class App
     /**
      * @return array
      */
-    public function getExchangeFilters(): array
+    public function getBinanceExchangeFilters(): array
     {
-        return $this->exchangeFilters;
+        return $this->binanceExchangeFilters;
     }
 
     /**
-     * @param $tokenPair
+     * @param array $binanceExchangeFilters
+     */
+    public function setBinanceExchangeFilters(array $binanceExchangeFilters): void
+    {
+        $this->binanceExchangeFilters = $binanceExchangeFilters;
+    }
+
+    /**
+     * @return array
+     */
+    public function getBittrexExchangeFilters(): array
+    {
+        return $this->bittrexExchangeFilters;
+    }
+
+    /**
+     * @param array $bittrexExchangeFilters
+     */
+    public function setBittrexExchangeFilters(array $bittrexExchangeFilters): void
+    {
+        $this->bittrexExchangeFilters = $bittrexExchangeFilters;
+    }
+
+    /**
+     * @param Trade $trade
      * @return mixed
      */
-    public function getExchangeFiltersTokenPair($tokenPair)
+    public function getExchangeFiltersTokenPair(Trade $trade)
     {
-        $exchangeFilters = $this->getExchangeFilters();
-        return $exchangeFilters[$tokenPair];
-    }
-
-    /**
-     * @param array $exchangeFilters
-     */
-    public function setExchangeFilters(array $exchangeFilters): void
-    {
-        $this->exchangeFilters = $exchangeFilters;
+        if ($trade->getExchange() == 'binance') {
+            $binanceExchangeFilters = $this->getBinanceExchangeFilters();
+            return $binanceExchangeFilters[$trade->getTokenPair()];
+        }
+        if ($trade->getExchange() == 'bittrex') {
+            $bittrexExchangeFilters = $this->getBittrexExchangeFilters();
+            return $bittrexExchangeFilters[$trade->getTokenPair()];
+        }
+        return false;
     }
 
     /**
@@ -326,6 +386,71 @@ class App
     public function setBinanceBalances(array $binanceBalances): void
     {
         $this->binanceBalances = $binanceBalances;
+    }
+
+    /**
+     * @return array
+     */
+    public function getBittrexBalances(): array
+    {
+        return $this->bittrexBalances;
+    }
+
+    /**
+     * @param array $bittrexBalances
+     */
+    public function setBittrexBalances(array $bittrexBalances): void
+    {
+        $this->bittrexBalances = $bittrexBalances;
+    }
+
+
+    /**
+     * @return string
+     */
+    public function getBittrexApiKey(): string
+    {
+        return $this->bittrexApiKey;
+    }
+
+    /**
+     * @param string $bittrexApiKey
+     */
+    public function setBittrexApiKey(string $bittrexApiKey): void
+    {
+        $this->bittrexApiKey = $bittrexApiKey;
+    }
+
+    /**
+     * @return string
+     */
+    public function getBittrexApiSecret(): string
+    {
+        return $this->bittrexApiSecret;
+    }
+
+    /**
+     * @param string $bittrexApiSecret
+     */
+    public function setBittrexApiSecret(string $bittrexApiSecret): void
+    {
+        $this->bittrexApiSecret = $bittrexApiSecret;
+    }
+
+    /**
+     * @return BittrexClient
+     */
+    public function getBittrex()
+    {
+        return $this->bittrex;
+    }
+
+    /**
+     * @param mixed $bittrex
+     */
+    public function setBittrex($bittrex): void
+    {
+        $this->bittrex = $bittrex->createClient();
     }
 
     /**
@@ -417,12 +542,20 @@ class App
         $trade['amount'] = $t->getAmount();
         $trade['exchangeFilters'] = $t->getExchangeFilters();
 
-        $command = 'bin/console jink:trade '.$this->getBinaneApiKey().' '.$this->getBinaneApiSecret().' '.$this->getJinkApiUrl().' '.$this->getJinkApiKey().' '.$this->getClientId();
+        $command = 'bin/console jink:trade '.
+            $this->getBinaneApiKey().' '.
+            $this->getBinaneApiSecret().' '.
+            $this->getBittrexApiKey().' '.
+            $this->getBittrexApiSecret().' '.
+            $this->getJinkApiUrl().' '.
+            $this->getJinkApiKey().' '.
+            $this->getClientId();
         $command .= ' \''.json_encode($trade).'\'';
 
         if (!$this->isProduction()) {
             $command .= ' --dev';
         }
+
         return $command;
     }
 
@@ -447,18 +580,9 @@ class App
     }
 
     /**
-     * @param string $tokenPair
-     * @return mixed
-     */
-    public function getBinancePrice(string $tokenPair)
-    {
-        return $this->getBinance()->price($tokenPair);
-    }
-
-    /**
      * @return array
      */
-    private function prepareExchangeInfo()
+    private function prepareBinanceExchangeInfo()
     {
         $exchangeInfo = $this->binance->exchangeInfo();
         $filters = [];
@@ -468,6 +592,22 @@ class App
                     $filters[$tokenPair['symbol']] = $filter;
                 }
             }
+        }
+        return $filters;
+    }
+
+    /**
+     * @return array
+     */
+    private function prepareBittrexExchangeInfo()
+    {
+        $exchangeInfo = json_decode($this->bittrex->getMarkets(), true);
+        $filters = [];
+        foreach ($exchangeInfo['result'] as $tokenPair) {
+            $key = $tokenPair['BaseCurrency'].'-'.$tokenPair['MarketCurrency'];
+            $filters[$key]['minQty'] = $tokenPair['MinTradeSize'];
+            $filters[$key]['maxQty'] = $this::INFINITE;
+            $filters[$key]['stepSize'] = $this::STEP_8TH;
         }
         return $filters;
     }

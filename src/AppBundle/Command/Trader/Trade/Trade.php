@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 namespace AppBundle\Command\Trader\Trade;
+use AppBundle\Command\Trader\App;
 use AppBundle\Command\Trader\Model\Certainty;
 use AppBundle\Command\Trader\Model\Current;
 use AppBundle\Command\Trader\Model\Limit;
@@ -261,7 +262,13 @@ class Trade {
      */
     public function getTokenPair()
     {
-        return $this->getToken().$this->getBasicToken();
+        if ($this->getExchange() == 'binance') {
+            return $this->getToken() . $this->getBasicToken();
+        }
+        if ($this->getExchange() == 'bittrex') {
+            return $this->getBasicToken().'-'.$this->getToken();
+        }
+        return false;
     }
 
     /**
@@ -361,11 +368,14 @@ class Trade {
      */
     public function roundTokenAmount($tokenAmount) {
         $exchangeFilters = $this->getExchangeFilters();
+
         $i = $exchangeFilters['stepSize'];
+
         $j=1;
         while ($i!=1) {
             $i*=10; $j++;
         }
+
         $tokenAmount = $this->roundDown($tokenAmount, $j);
         if ($tokenAmount >= $exchangeFilters['minQty']
             && $tokenAmount <= $exchangeFilters['maxQty']) {
@@ -378,40 +388,75 @@ class Trade {
      * @param $orderData
      */
     public function recalculateBuyPrice($orderData) {
-        $sumAmount = 0;
-        foreach ($orderData['fills'] as $fill) {
-            $sumAmount += $fill['price'] * $fill['qty'];
-        }
 
-        // round ?? @TODO
-        $this->getPrice()->setBuy($sumAmount / $this->getBuyTokenAmount());
     }
 
     /**
-     * @param \Binance\API $binance
-     * @return array|bool|mixed
+     * @param App $app
+     * @return array
      */
-    public function buyMarket(\Binance\API $binance) {
+    public function buyMarket(App $app, $deviation = 0.1) {
+        $result = false;
 
         $buyTokenAmount = $this->roundTokenAmount($this->getBuyTokenAmount());
+
         if (!$buyTokenAmount) {
             return ['msg' => 'Invalid amount to Buy: '.$this->getBuyTokenAmount().', rounded to 0'];
         }
-        $result = $binance->marketBuy($this->getTokenPair(), $buyTokenAmount);
 
-        $this->setBuyTokenAmount($buyTokenAmount);
-        $this->recalculateBuyPrice($result);
-        $this->getPrice()->setMax($this->getPrice()->getBuy());
+        if ($this->getExchange() == 'binance') {
+            $result = $app->getBinance()->marketBuy($this->getTokenPair(), $buyTokenAmount);
+
+            $this->setBuyTokenAmount($buyTokenAmount);
+            $sumAmount = 0;
+            foreach ($result['fills'] as $fill) {
+                $sumAmount += $fill['price'] * $fill['qty'];
+            }
+            $this->getPrice()->setBuy($sumAmount / $this->getBuyTokenAmount());
+            $this->getPrice()->setMax($this->getPrice()->getBuy());
+        }
+
+        if ($this->getExchange() == 'bittrex') {
+
+            $orderBook = json_decode($app->getBittrex()->getOrderBook($this->getTokenPair(), 'sell'), true);
+
+            $sumQuantity = 0;
+            $sumPrice = 0;
+            $maxPrice = 0;
+            foreach($orderBook['result'] as $order) {
+                $sumQuantity += $order['Quantity'];
+                $sumPrice += $order['Rate'] * $order['Quantity'];
+                if ($sumQuantity >= ($this->getBuyTokenAmount())) {
+                    $maxPrice = $order['Rate']*(1+$deviation);
+                    break;
+                }
+            }
+
+            $result = json_decode($app->getBittrex()->buyLimit($this->getTokenPair(), $buyTokenAmount, $maxPrice), true);
+            $orderId = $result['result']['uuid'];
+            sleep(2);
+            $order = json_decode($app->getBittrex()->getOrder($orderId), true);
+
+            if ($order['result']['Quantity'] - $order['result']['QuantityRemaining'] == $buyTokenAmount) {
+                $buyPrice = $order['result']['Price'];
+                $this->setBuyTokenAmount($buyTokenAmount);
+                $this->getPrice()->setBuy($buyPrice);
+                $this->getPrice()->setMax($this->getPrice()->getBuy());
+                $result['orderId'] = $orderId;
+            } else {
+                $result['msg'] = 'Couldn\'t fill 100%, please check on Bittrex and proceed manually';
+            }
+        }
 
         return $result;
     }
 
     /**
-     * @param \Binance\API $binance
+     * @param App $app
      * @param float $fee
-     * @return array|bool|mixed
+     * @return array
      */
-    private function sellMarket(\Binance\API $binance, $fee=0.001) {
+    private function sellMarket(App $app, $fee=0.001, $deviation = 0.1) {
 
         $sellTokenAmount = $this->getBuyTokenAmount()-($this->getBuyTokenAmount() * $fee);
         $sellTokenAmount = $this->roundTokenAmount($sellTokenAmount);
@@ -419,18 +464,103 @@ class Trade {
         if (!$sellTokenAmount) {
             return ['msg' => 'Invalid amount to Sell: '.$this->getBuyTokenAmount().', rounded to 0'];
         }
-        $result = $binance->marketSell($this->getTokenPair(), $sellTokenAmount);
 
+        if ($this->getExchange() == 'binance') {
+            $result = $app->getBinance()->marketSell($this->getTokenPair(), $sellTokenAmount);
+
+            $sumAmount = 0;
+            foreach ($result['fills'] as $fill) {
+                $sumAmount += $fill['price'] * $fill['qty'];
+            }
+            $sellPrice = $sumAmount / $sellTokenAmount;
+        }
+
+        if ($this->getExchange() == 'bittrex') {
+            $orderBook = json_decode($app->getBittrex()->getOrderBook($this->getTokenPair(), 'buy'), true);
+
+            $sumQuantity = 0;
+            $sumPrice = 0;
+            $minPrice = 0;
+            foreach($orderBook['result'] as $order) {
+                $sumQuantity += $order['Quantity'];
+                $sumPrice += $order['Rate'] * $order['Quantity'];
+                if ($sumQuantity >= ($this->getBuyTokenAmount())) {
+                    $minPrice = $order['Rate']*(1-$deviation);
+                    break;
+                }
+            }
+
+            $result = json_decode($app->getBittrex()->sellLimit($this->getTokenPair(), $sellTokenAmount, $minPrice), true);
+            $orderId = $result['result']['uuid'];
+            $order = json_decode($app->getBittrex()->getOrder($orderId), true);
+
+            if ($order['result']['Quantity'] - $order['result']['QuantityRemaining'] == $sellTokenAmount) {
+                $sellPrice = $order['result']['Price'];
+                $result['orderId'] = $orderId;
+            } else {
+                $result['msg'] = 'Couldn\'t fill 100%, please check on Bittrex and proceed manually';
+            }
+        }
+
+        $this->calculateCurrentState($app, $sellPrice);
         return $result;
     }
 
     /**
-     * @param \Binance\API $binance
+     * @param App $app
+     * @param $type ['buy', 'sell']
+     * @return bool|float
      */
-    public function calculateCurrentState(\Binance\API $binance)
+    public function getCurrentPrice(App $app, $type) {
+
+        if ($this->getExchange() == 'binance') {
+            $orderBook = $app->getBinance()->depth($this->getTokenPair());
+            if ($type == 'buy') $type = 'asks';
+            if ($type == 'sell') $type = 'bids';
+
+            $sumQuantity = 0;
+            $sumBasicQuantity = 0;
+
+            foreach($orderBook[$type] as $price => $volume) {
+                $sumQuantity += $volume;
+                $sumBasicQuantity += $price * $volume;
+                if ($sumBasicQuantity >= ($this->getAmount())) {
+                    return $sumBasicQuantity / $sumQuantity;
+                    break;
+                }
+            }
+        }
+
+        if ($this->getExchange() == 'bittrex') {
+            $orderBook = json_decode($app->getBittrex()->getOrderBook($this->getTokenPair(), $type), true);
+
+            $sumQuantity = 0;
+            $sumBasicQuantity = 0;
+            foreach($orderBook['result'] as $order) {
+                $sumQuantity += $order['Quantity'];
+                $sumBasicQuantity += $order['Rate'] * $order['Quantity'];
+                if ($sumBasicQuantity >= ($this->getAmount())) {
+                    return $sumBasicQuantity / $sumQuantity;
+                    break;
+                }
+            }
+
+        }
+        return false;
+    }
+
+    /**
+     * @param App $app
+     * @param int $currentPrice
+     */
+    public function calculateCurrentState(App $app, $currentPrice = 0)
     {
         $this->getPrice()->setLast($this->getPrice()->getCurrent());
-        $this->getPrice()->setCurrent($binance->price($this->getTokenPair()));
+        if ($currentPrice > 0) {
+            $this->getPrice()->setCurrent($currentPrice);
+        } else {
+            $this->getPrice()->setCurrent($this->getCurrentPrice($app, 'sell'));
+        }
         $this->getPrice()->setMax(max($this->getPrice()->getCurrent(), $this->getPrice()->getMax()));
 
         $this->getCurrent()->setProfit(round(($this->getPrice()->getCurrent() - $this->getPrice()->getBuy())*100 / $this->getPrice()->getBuy(),2));
@@ -467,10 +597,10 @@ class Trade {
 
     /**
      * @param $certaintyLimit
-     * @param $binance
+     * @param $app
      * @return array|bool|mixed
      */
-    public function sellOnLimits($certaintyLimit, $binance, $isProduction) {
+    public function sellOnLimits($certaintyLimit, $app, $isProduction) {
 
         if (($this->getCertainty()->getProfit() >= $certaintyLimit)
             || ($this->getCertainty()->getDump() >= $certaintyLimit)
@@ -478,7 +608,7 @@ class Trade {
 
             $this->setState(Trade::STATE_CLOSED);
             if ($isProduction) {
-                return $this->sellMarket($binance);
+                return $this->sellMarket($app);
             }
             return [];
         }
@@ -486,11 +616,11 @@ class Trade {
     }
 
     /**
-     * @param $binance
+     * @param $app
      * @param $isProduction
      * @return array|bool
      */
-    public function sellOnTime($binance, $isProduction) {
+    public function sellOnTime($app, $isProduction) {
 
         $timeLimit = $this->getLimit()->getTime();
 
@@ -500,7 +630,7 @@ class Trade {
                 // trigger sale
                 $this->setState(Trade::STATE_CLOSED);
                 if ($isProduction) {
-                    return $this->sellMarket($binance);
+                    return $this->sellMarket($app);
                 }
                 return [];
             }
@@ -509,15 +639,15 @@ class Trade {
     }
 
     /**
-     * @param $binance
+     * @param $app
      * @param $isProduction
      * @return array|bool|mixed
      */
-    public function sellOnRequest($binance, $isProduction) {
+    public function sellOnRequest($app, $isProduction) {
 
         $this->setState(Trade::STATE_CLOSED);
         if ($isProduction) {
-            return $this->sellMarket($binance);
+            return $this->sellMarket($app);
         }
         return [];
 

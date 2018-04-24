@@ -44,6 +44,8 @@ class ClientCommand extends ContainerAwareCommand
             ->setName('jink:client')
             ->addArgument("binance_api_key", InputArgument::REQUIRED, "Binance API KEY")
             ->addArgument("binance_api_secret", InputArgument::REQUIRED, "Binance API Secret")
+            ->addArgument("bittrex_api_key", InputArgument::REQUIRED, "Bittrex API Secret")
+            ->addArgument("bittrex_api_secret", InputArgument::REQUIRED, "Bittrex API Secret")
             ->addArgument("jink_api_url", InputArgument::REQUIRED, "JiNK API URL")
             ->addArgument("jink_api_key", InputArgument::REQUIRED, "JiNK API KEY")
             ->addOption("dev", "d", InputOption::VALUE_NONE, 'Run in dev mode?')
@@ -59,10 +61,12 @@ class ClientCommand extends ContainerAwareCommand
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $app = new App(
-            $input->getArgument('jink_api_key'),
-            $input->getArgument('jink_api_url'),
             $input->getArgument('binance_api_key'),
             $input->getArgument('binance_api_secret'),
+            $input->getArgument('bittrex_api_key'),
+            $input->getArgument('bittrex_api_secret'),
+            $input->getArgument('jink_api_key'),
+            $input->getArgument('jink_api_url'),
             $input->getOption('dev')
         );
 
@@ -73,6 +77,10 @@ class ClientCommand extends ContainerAwareCommand
 
         if (!empty($app->getBinanceBalances())) {
             $app->addExchange('binance');
+        }
+
+        if (!empty($app->getBittrexBalances())) {
+            $app->addExchange('bittrex');
         }
 
         // no exchanges
@@ -121,9 +129,10 @@ class ClientCommand extends ContainerAwareCommand
                         $trade->setToken($token);
                         $trade->setAmount((float)$tokenAmount);
 
-                        $buyPrice = $app->getBinancePrice($trade->getTokenPair());
+                        $buyPrice = $trade->getCurrentPrice($app, 'buy');
+
                         if (!$buyPrice) {
-                            $this->logs[] = new Log("No such pair (".$basicToken."/".$token.") on Binance", Log::LOG_LEVEL_ERROR);
+                            $this->logs[] = new Log("No such pair (".$basicToken."/".$token.") on ".$trade->getExchange(), Log::LOG_LEVEL_ERROR);
                             continue;
                         }
 
@@ -134,12 +143,13 @@ class ClientCommand extends ContainerAwareCommand
 
                         $trade->getPrice()->setBuy($buyPrice);
                         $trade->setBuyTokenAmount($trade->getAmount() / $trade->getPrice()->getBuy());
-                        $trade->setExchangeFilters($app->getExchangeFiltersTokenPair($trade->getTokenPair()));
 
-                        $this->logs[] = new Log("Placing Market Buy for " . $trade->getBasicToken() . "/" . $trade->getToken() . " at price " . sprintf("%.8f", $trade->getPrice()->getBuy()), Log::LOG_LEVEL_INFO);
+                        $trade->setExchangeFilters($app->getExchangeFiltersTokenPair($trade));
+
+                        $this->logs[] = new Log("Placing Buy Order for " . $trade->getBasicToken() . "/" . $trade->getToken() . " at price " . sprintf("%.8f", $trade->getPrice()->getBuy()), Log::LOG_LEVEL_INFO);
 
                         if ($app->isProduction()) {
-                            $result = $trade->buyMarket($app->getBinance());
+                            $result = $trade->buyMarket($app);
 
                             if (!$result) {
                                 $this->logs[] = new Log("Invalid response for setting up order", Log::LOG_LEVEL_ERROR);

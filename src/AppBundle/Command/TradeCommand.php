@@ -42,6 +42,8 @@ class TradeCommand extends ContainerAwareCommand
             ->setName('jink:trade')
             ->addArgument("binance_api_key", InputArgument::REQUIRED, "Binance API KEY")
             ->addArgument("binance_api_secret", InputArgument::REQUIRED, "Binance API Secret")
+            ->addArgument("bittrex_api_key", InputArgument::REQUIRED, "Bittrex API Secret")
+            ->addArgument("bittrex_api_secret", InputArgument::REQUIRED, "Bittrex API Secret")
             ->addArgument("jink_api_url", InputArgument::REQUIRED, "JiNK API URL")
             ->addArgument("jink_api_key", InputArgument::REQUIRED, "JiNK API KEY")
             ->addArgument("jink_client_id", InputArgument::REQUIRED, "JiNK ClientID")
@@ -59,10 +61,12 @@ class TradeCommand extends ContainerAwareCommand
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $app = new App(
-            $input->getArgument('jink_api_key'),
-            $input->getArgument('jink_api_url'),
             $input->getArgument('binance_api_key'),
             $input->getArgument('binance_api_secret'),
+            $input->getArgument('bittrex_api_key'),
+            $input->getArgument('bittrex_api_secret'),
+            $input->getArgument('jink_api_key'),
+            $input->getArgument('jink_api_url'),
             $input->getOption('dev'),
             $input->getArgument('jink_client_id')
        );
@@ -70,11 +74,6 @@ class TradeCommand extends ContainerAwareCommand
         if (!$app->isProduction()) {
             $view = new View($input, $output);
             $view->getOutput()->write(sprintf("\033\143"));
-        }
-
-        /** If problem with Binance connection -- EXIT */
-        if (empty($app->getBinanceBalances())) {
-            return;
         }
 
         $tradeJson = $input->getArgument('trade');
@@ -90,6 +89,7 @@ class TradeCommand extends ContainerAwareCommand
         $trade->setBasicToken($tradeJson['basicToken']);
         $trade->setToken($tradeJson['token']);
         $trade->setSignal($tradeJson['signal']);
+        $trade->setExchange($tradeJson['exchange']);
 
         $trade->setAmount((float)$tradeJson['amount']);
         $trade->getPrice()->setBuy($tradeJson['price']['buy']);
@@ -103,14 +103,14 @@ class TradeCommand extends ContainerAwareCommand
             $now = new \DateTime();
             $interval = $now->diff($trade->getTimestamp());
 
-            $trade->calculateCurrentState($app->getBinance());
+            $trade->calculateCurrentState($app);
             $trade->checkLimits();
 
             /** Check for limit sell */
 
-            $handleSell = $trade->sellOnLimits($app->getCertaintyLimit(), $app->getBinance(), $app->isProduction());
+            $handleSell = $trade->sellOnLimits($app->getCertaintyLimit(), $app, $app->isProduction());
             if ($trade->isOpen()) {
-                $handleSell = $trade->sellOnTime($app->getBinance(), $app->isProduction());
+                $handleSell = $trade->sellOnTime($app, $app->isProduction());
             }
 
             /** Check for user forced actions */
@@ -121,7 +121,7 @@ class TradeCommand extends ContainerAwareCommand
                         $this->logs[] = new Log("Canceling trade " . $trade->getBasicToken() . "/" . $trade->getToken() . " due to user request after ".$interval->format("%h hours %i minutes"), Log::LOG_LEVEL_INFO);
                         break;
                     case Event::STATE_TO_SELL:
-                        $handleSell = $trade->sellOnRequest($app->getBinance(), $app->isProduction());
+                        $handleSell = $trade->sellOnRequest($app, $app->isProduction());
                         $this->logs[] = new Log("Manually closing trade " . $trade->getBasicToken() . "/" . $trade->getToken() . " due to user request after ".$interval->format("%h hours %i minutes"), Log::LOG_LEVEL_INFO);
                         break;
                 }
