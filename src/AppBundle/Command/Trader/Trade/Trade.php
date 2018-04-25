@@ -268,6 +268,9 @@ class Trade {
         if ($this->getExchange() == 'bittrex') {
             return $this->getBasicToken().'-'.$this->getToken();
         }
+        if ($this->getExchange() == 'kucoin') {
+            return $this->getToken().'/'.$this->getBasicToken();
+        }
         return false;
     }
 
@@ -437,14 +440,50 @@ class Trade {
             sleep(2);
             $order = json_decode($app->getBittrex()->getOrder($orderId), true);
 
-            if ($order['result']['Quantity'] - $order['result']['QuantityRemaining'] == $buyTokenAmount) {
-                $buyPrice = $order['result']['PricePerUnit'];
+            if (isset($order['result']['Quantity']) && isset($order['result']['QuantityRemaining']) && ($order['result']['Quantity'] - $order['result']['QuantityRemaining']) == $buyTokenAmount) {
+                $buyPrice = isset($order['result']['PricePerUnit'])?$order['result']['PricePerUnit']:0;
                 $this->setBuyTokenAmount($buyTokenAmount);
                 $this->getPrice()->setBuy($buyPrice);
                 $this->getPrice()->setMax($this->getPrice()->getBuy());
                 $result['orderId'] = $orderId;
             } else {
-                $result['msg'] = 'Couldn\'t fill 100%, please check on Bittrex and proceed manually';
+                $result['msg'] = 'Filled less than 100%, please check on Bittrex and proceed manually';
+            }
+        }
+
+        if ($this->getExchange() == 'kucoin') {
+
+            $orderBook = $app->getKucoin()->fetch_order_book($this->getTokenPair(), null, ['limit' => '50']);
+
+            $sumQuantity = 0;
+            $sumPrice = 0;
+            $maxPrice = 0;
+            foreach($orderBook['bids'] as $order) {
+                $sumQuantity += $order['1'];
+                $sumPrice += $order['0'] * $order['1'];
+                if ($sumQuantity >= ($this->getBuyTokenAmount())) {
+                    $maxPrice = $order['0']*(1+$deviation);
+                    break;
+                }
+            }
+
+            try {
+                $result = $app->getKucoin()->create_order($this->getTokenPair(), 'limit', 'BUY', $buyTokenAmount, $maxPrice);
+                $orderId = $result['info']['data']['orderOid'];
+                sleep(2);
+                $order = $app->getKucoin()->fetch_order($orderId, $this->getTokenPair(), ['type' => 'BUY']);
+            } catch (\Exception $e) {
+                $result['msg'] = 'Kucoin setting up order error (check Kucoin for order details): '.$e->getMessage();
+            }
+
+            if (isset($order['info']['dealPriceAverage']) && isset($order['info']['pendingAmount']) && ($order['info']['pendingAmount'] == 0)) {
+                $buyPrice = isset($order['info']['dealPriceAverage'])?$order['info']['dealPriceAverage']:0;
+                $this->setBuyTokenAmount($buyTokenAmount);
+                $this->getPrice()->setBuy($buyPrice);
+                $this->getPrice()->setMax($this->getPrice()->getBuy());
+                $result['orderId'] = $orderId;
+            } else {
+                $result['msg'] = 'Filled less than 100%, please check on Kucoin and proceed manually';
             }
         }
 
@@ -460,6 +499,7 @@ class Trade {
 
         $sellTokenAmount = $this->getBuyTokenAmount()-($this->getBuyTokenAmount() * $fee);
         $sellTokenAmount = $this->roundTokenAmount($sellTokenAmount);
+        $sellPrice = 0;
 
         if (!$sellTokenAmount) {
             return ['msg' => 'Invalid amount to Sell: '.$this->getBuyTokenAmount().', rounded to 0'];
@@ -492,13 +532,50 @@ class Trade {
 
             $result = json_decode($app->getBittrex()->sellLimit($this->getTokenPair(), $sellTokenAmount, $minPrice), true);
             $orderId = $result['result']['uuid'];
+            sleep(2);
             $order = json_decode($app->getBittrex()->getOrder($orderId), true);
 
-            if ($order['result']['Quantity'] - $order['result']['QuantityRemaining'] == $sellTokenAmount) {
-                $sellPrice = $order['result']['Price'];
+            if (isset($order['result']['Quantity']) && isset($order['result']['QuantityRemaining']) && ($order['result']['Quantity'] - $order['result']['QuantityRemaining']) == $sellTokenAmount) {
+                $sellPrice = isset($order['result']['PricePerUnit'])?$order['result']['PricePerUnit']:0;
                 $result['orderId'] = $orderId;
             } else {
-                $result['msg'] = 'Couldn\'t fill 100%, please check on Bittrex and proceed manually';
+                $result['msg'] = 'Filled less than 100%, please check on Bittrex and proceed manually';
+            }
+        }
+
+        if ($this->getExchange() == 'kucoin') {
+            $orderBook = $app->getKucoin()->fetch_order_book($this->getTokenPair(), null, ['limit' => '50']);
+
+            $sumQuantity = 0;
+            $sumPrice = 0;
+            $minPrice = 0;
+            $avgPrice = 0;
+            foreach($orderBook['asks'] as $order) {
+                $sumQuantity += $order['1'];
+                $sumPrice += $order['0'] * $order['1'];
+                if ($sumQuantity >= ($this->getBuyTokenAmount())) {
+                    $minPrice = $order['0']*(1-$deviation);
+                    $sumPrice -= $order['0'] * $order['1'];
+                    $sumQuantity -= $order['1'];
+                    $sumPrice += $order['0'] * ($this->getBuyTokenAmount() - $sumQuantity);
+                    $sumQuantity += $this->getBuyTokenAmount();
+                    $avgPrice = $sumPrice / $sumQuantity;
+                    break;
+                }
+            }
+
+            try {
+                $result = $app->getKucoin()->create_order($this->getTokenPair(), 'limit', 'SELL', $sellTokenAmount, $minPrice);
+                $orderId = $result['info']['data']['orderOid'];
+            } catch (\Exception $e) {
+                $result['msg'] = 'Kucoin setting up order error (check Kucoin for order details): '.$e->getMessage();
+            }
+
+            if (isset($orderId)) {
+                $sellPrice = $avgPrice;
+                $result['orderId'] = $orderId;
+            } else {
+                $result['msg'] = 'Filled less than 100%, please check on Kucoin and proceed manually';
             }
         }
 
@@ -544,8 +621,25 @@ class Trade {
                     break;
                 }
             }
-
         }
+
+        if ($this->getExchange() == 'kucoin') {
+            $orderBook = $app->getKucoin()->fetch_order_book($this->getTokenPair(), null, ['limit' => '20']);
+            if ($type == 'buy') $type = 'asks';
+            if ($type == 'sell') $type = 'bids';
+
+            $sumQuantity = 0;
+            $sumBasicQuantity = 0;
+            foreach($orderBook[$type] as $order) {
+                $sumQuantity += $order[1];
+                $sumBasicQuantity += $order[0] * $order[1];
+                if ($sumBasicQuantity >= ($this->getAmount())) {
+                    return $sumBasicQuantity / $sumQuantity;
+                    break;
+                }
+            }
+        }
+
         return false;
     }
 

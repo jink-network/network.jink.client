@@ -5,10 +5,12 @@ namespace AppBundle\Command\Trader;
 use AppBundle\Command\Trader\Trade\Trade;
 use AppBundle\Entity\Log;
 use AppBundle\Service\JinkService;
+use ccxt\kucoin;
 use codenixsv\Bittrex\BittrexManager;
 use codenixsv\Bittrex\Clients\BittrexClient;
 use Ramsey\Uuid\Uuid;
 use Symfony\Component\Process\Process;
+
 
 /**
  * Class App
@@ -58,6 +60,21 @@ class App
     /** @var array */
     private $bittrexExchangeFilters;
 
+    /** @var string */
+    private $kucoinApiKey;
+
+    /** @var string */
+    private $kucoinApiSecret;
+
+    /** @var kucoin */
+    private $kucoin;
+
+    /** @var array */
+    private $kucoinBalances;
+
+    /** @var array */
+    private $kucoinExchangeFilters;
+
     /** @var JinkService */
     private $jink;
 
@@ -96,7 +113,16 @@ class App
      * @param $dev
      * @param string|null $jinkClientId
      */
-    public function __construct($binanceApiKey, $binanceApiSecret, $bittrexApiKey, $bittrexApiSecret, $jinkApiKey, $jinkApiUrl, $dev, string $jinkClientId = null)
+    public function __construct($binanceApiKey,
+                                $binanceApiSecret,
+                                $bittrexApiKey,
+                                $bittrexApiSecret,
+                                $kucoinApiKey,
+                                $kucoinApiSecret,
+                                $jinkApiKey,
+                                $jinkApiUrl,
+                                $dev, string
+                                $jinkClientId = null)
     {
         $this->setProcesses([]);
         $this->setCertaintyLimit($this::CERTAINTY_LIMIT);
@@ -124,6 +150,11 @@ class App
         $this->setBittrexApiSecret($bittrexApiSecret);
         $this->setBittrex(new BittrexManager($bittrexApiKey, $bittrexApiSecret));
 
+        /* Set up KuCoin */
+        $this->setKucoinApiKey($kucoinApiKey);
+        $this->setKucoinApiSecret($kucoinApiSecret);
+        $this->setKucoin(new kucoin(['apiKey' => $kucoinApiKey, 'secret' => $kucoinApiSecret]));
+
         $this->resetApp();
     }
 
@@ -132,6 +163,7 @@ class App
      */
     public function resetApp() {
 
+        // prepare Binance
         $balances = $this->getBinance()->balances();
         if (!$balances) {
             $log = new Log("Invalid Binance credentials - ignoring",Log::LOG_LEVEL_ERROR);
@@ -142,6 +174,7 @@ class App
             $this->setBinanceExchangeFilters($this->prepareBinanceExchangeInfo());
         }
 
+        // pepare Bittrex
         $balances = json_decode($this->getBittrex()->getBalances(), true);
         if (!$balances['success']) {
             $log = new Log("Invalid Bittrex credentials - ignoring",Log::LOG_LEVEL_ERROR);
@@ -151,6 +184,18 @@ class App
             $this->setBittrexBalances($balances);
             $this->setBittrexExchangeFilters($this->prepareBittrexExchangeInfo());
         }
+
+        // pepare Kucoin
+        $balances = $this->getKucoin()->fetch_balance();
+        if (!$balances['info']) {
+            $log = new Log("Invalid Kucoin credentials - ignoring",Log::LOG_LEVEL_ERROR);
+            $this->getJink()->postLog($log);
+            $this->setKucoinBalances([]);
+        } else {
+            $this->setKucoinBalances($balances);
+            $this->setKucoinExchangeFilters($this->prepareKucoinExchangeInfo());
+        }
+
         $this->getJink()->updateLastSignal();
     }
 
@@ -321,6 +366,10 @@ class App
             $bittrexExchangeFilters = $this->getBittrexExchangeFilters();
             return $bittrexExchangeFilters[$trade->getTokenPair()];
         }
+        if ($trade->getExchange() == 'kucoin') {
+            $kucoinExchangeFilters = $this->getKucoinExchangeFilters();
+            return $kucoinExchangeFilters[$trade->getTokenPair()];
+        }
         return false;
     }
 
@@ -454,6 +503,87 @@ class App
     }
 
     /**
+     * @return string
+     */
+    public function getKucoinApiKey(): string
+    {
+        return $this->kucoinApiKey;
+    }
+
+    /**
+     * @param string $kucoinApiKey
+     */
+    public function setKucoinApiKey(string $kucoinApiKey): void
+    {
+        $this->kucoinApiKey = $kucoinApiKey;
+    }
+
+    /**
+     * @return string
+     */
+    public function getKucoinApiSecret(): string
+    {
+        return $this->kucoinApiSecret;
+    }
+
+    /**
+     * @param string $kucoinApiSecret
+     */
+    public function setKucoinApiSecret(string $kucoinApiSecret): void
+    {
+        $this->kucoinApiSecret = $kucoinApiSecret;
+    }
+
+    /**
+     * @return kucoin
+     */
+    public function getKucoin(): kucoin
+    {
+        return $this->kucoin;
+    }
+
+    /**
+     * @param kucoin $kucoin
+     */
+    public function setKucoin(kucoin $kucoin): void
+    {
+        $this->kucoin = $kucoin;
+    }
+
+    /**
+     * @return array
+     */
+    public function getKucoinBalances(): array
+    {
+        return $this->kucoinBalances;
+    }
+
+    /**
+     * @param array $kucoinBalances
+     */
+    public function setKucoinBalances(array $kucoinBalances): void
+    {
+        $this->kucoinBalances = $kucoinBalances;
+    }
+
+    /**
+     * @return array
+     */
+    public function getKucoinExchangeFilters(): array
+    {
+        return $this->kucoinExchangeFilters;
+    }
+
+    /**
+     * @param array $kucoinExchangeFilters
+     */
+    public function setKucoinExchangeFilters(array $kucoinExchangeFilters): void
+    {
+        $this->kucoinExchangeFilters = $kucoinExchangeFilters;
+    }
+
+
+    /**
      * @return array|null
      */
     public function getProcesses()
@@ -547,6 +677,8 @@ class App
             $this->getBinaneApiSecret().' '.
             $this->getBittrexApiKey().' '.
             $this->getBittrexApiSecret().' '.
+            $this->getKucoinApiKey().' '.
+            $this->getKucoinApiSecret().' '.
             $this->getJinkApiUrl().' '.
             $this->getJinkApiKey().' '.
             $this->getClientId();
@@ -608,6 +740,22 @@ class App
             $filters[$key]['minQty'] = $tokenPair['MinTradeSize'];
             $filters[$key]['maxQty'] = $this::INFINITE;
             $filters[$key]['stepSize'] = $this::STEP_8TH;
+        }
+        return $filters;
+    }
+
+    /**
+     * @return array
+     */
+    private function prepareKucoinExchangeInfo()
+    {
+        $exchangeInfo = $this->kucoin->fetch_markets();
+        $filters = [];
+        foreach ($exchangeInfo as $tokenPair) {
+            $key = $tokenPair['base'].'/'.$tokenPair['quote'];
+            $filters[$key]['minQty'] = $tokenPair['limits']['amount']['min'];
+            $filters[$key]['maxQty'] = $this::INFINITE;
+            $filters[$key]['stepSize'] = $tokenPair['lot'];
         }
         return $filters;
     }

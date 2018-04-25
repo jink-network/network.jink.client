@@ -44,6 +44,8 @@ class TradeCommand extends ContainerAwareCommand
             ->addArgument("binance_api_secret", InputArgument::REQUIRED, "Binance API Secret")
             ->addArgument("bittrex_api_key", InputArgument::REQUIRED, "Bittrex API Secret")
             ->addArgument("bittrex_api_secret", InputArgument::REQUIRED, "Bittrex API Secret")
+            ->addArgument("kucoin_api_key", InputArgument::REQUIRED, "Kucoin API Secret")
+            ->addArgument("kucoin_api_secret", InputArgument::REQUIRED, "Kucoin API Secret")
             ->addArgument("jink_api_url", InputArgument::REQUIRED, "JiNK API URL")
             ->addArgument("jink_api_key", InputArgument::REQUIRED, "JiNK API KEY")
             ->addArgument("jink_client_id", InputArgument::REQUIRED, "JiNK ClientID")
@@ -65,6 +67,8 @@ class TradeCommand extends ContainerAwareCommand
             $input->getArgument('binance_api_secret'),
             $input->getArgument('bittrex_api_key'),
             $input->getArgument('bittrex_api_secret'),
+            $input->getArgument('kucoin_api_key'),
+            $input->getArgument('kucoin_api_secret'),
             $input->getArgument('jink_api_key'),
             $input->getArgument('jink_api_url'),
             $input->getOption('dev'),
