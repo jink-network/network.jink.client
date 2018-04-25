@@ -438,7 +438,7 @@ class Trade {
             $order = json_decode($app->getBittrex()->getOrder($orderId), true);
 
             if ($order['result']['Quantity'] - $order['result']['QuantityRemaining'] == $buyTokenAmount) {
-                $buyPrice = $order['result']['Price'];
+                $buyPrice = $order['result']['PricePerUnit'];
                 $this->setBuyTokenAmount($buyTokenAmount);
                 $this->getPrice()->setBuy($buyPrice);
                 $this->getPrice()->setMax($this->getPrice()->getBuy());
