@@ -473,7 +473,7 @@ class Trade {
                 sleep(2);
                 $order = $app->getKucoin()->fetch_order($orderId, $this->getTokenPair(), ['type' => 'BUY']);
             } catch (\Exception $e) {
-                $result['msg'] = 'Kucoin setting up order error (check Kucoin for order details): '.$e->getMessage();
+                $result['msg'] = 'Kucoin setting up BUY order error (check Kucoin for order details): '.$e->getMessage();
             }
 
             if (isset($order['info']['dealPriceAverage']) && isset($order['info']['pendingAmount']) && ($order['info']['pendingAmount'] == 0)) {
@@ -482,8 +482,6 @@ class Trade {
                 $this->getPrice()->setBuy($buyPrice);
                 $this->getPrice()->setMax($this->getPrice()->getBuy());
                 $result['orderId'] = $orderId;
-            } else {
-                $result['msg'] = 'Filled less than 100%, please check on Kucoin and proceed manually';
             }
         }
 
@@ -558,8 +556,7 @@ class Trade {
                     $sumPrice -= $order['0'] * $order['1'];
                     $sumQuantity -= $order['1'];
                     $sumPrice += $order['0'] * ($this->getBuyTokenAmount() - $sumQuantity);
-                    $sumQuantity += $this->getBuyTokenAmount();
-                    $avgPrice = $sumPrice / $sumQuantity;
+                    $avgPrice = $sumPrice / $this->getBuyTokenAmount();
                     break;
                 }
             }
@@ -568,14 +565,12 @@ class Trade {
                 $result = $app->getKucoin()->create_order($this->getTokenPair(), 'limit', 'SELL', $sellTokenAmount, $minPrice);
                 $orderId = $result['info']['data']['orderOid'];
             } catch (\Exception $e) {
-                $result['msg'] = 'Kucoin setting up order error (check Kucoin for order details): '.$e->getMessage();
+                $result['msg'] = 'Kucoin setting up SELL order failed (check Kucoin for order details): '.$e->getMessage();
             }
 
             if (isset($orderId)) {
                 $sellPrice = $avgPrice;
                 $result['orderId'] = $orderId;
-            } else {
-                $result['msg'] = 'Filled less than 100%, please check on Kucoin and proceed manually';
             }
         }
 

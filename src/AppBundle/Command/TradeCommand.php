@@ -134,10 +134,10 @@ class TradeCommand extends ContainerAwareCommand
 
             if (is_array($handleSell)) {
 
-                $this->logs[] = new Log("Placed Market Sell for " . $trade->getBasicToken() . "/" . $trade->getToken() . " with ".$trade->getCurrent()->getProfit()."% profit [Dump: ".$trade->getCurrent()->getDump()."%] after ".$interval->format("%h hours %i minutes"), Log::LOG_LEVEL_INFO);
-                $this->events[] = new Event(Event::ACTION_SELL, $trade);
-
-                if ($app->isProduction() && !isset($handleSell['orderId'])) {
+                if (isset($handleSell['orderId']) || !$app->isProduction()) {
+                    $this->logs[] = new Log("Placed Market Sell for " . $trade->getBasicToken() . "/" . $trade->getToken() . " with ".$trade->getCurrent()->getProfit()."% profit [Dump: ".$trade->getCurrent()->getDump()."%] after ".$interval->format("%h hours %i minutes"), Log::LOG_LEVEL_INFO);
+                    $this->events[] = new Event(Event::ACTION_SELL, $trade);
+                } else {
                     $trade->setState(Trade::STATE_ERROR);
                     $this->logs[] = new Log("Error while selling pair " . $trade->getBasicToken() . "/" . $trade->getToken().": ".$handleSell['msg'], Log::LOG_LEVEL_ERROR);
                 }
