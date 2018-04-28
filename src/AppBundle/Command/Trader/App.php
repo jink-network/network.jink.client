@@ -152,8 +152,10 @@ class App
             } else {
                 $this->setBinanceBalances($balances);
                 $this->setBinanceExchangeFilters($this->prepareBinanceExchangeInfo());
-                $log = new Log("Binance connected!",Log::LOG_LEVEL_INFO);
-                $this->getJink()->postLog($log);
+                if (!$jinkClientId) {
+                    $log = new Log("Binance connected!", Log::LOG_LEVEL_INFO);
+                    $this->getJink()->postLog($log);
+                }
             }
         } catch (\Exception $e) {
             $log = new Log("Invalid Binance credentials - ignoring: ",Log::LOG_LEVEL_INFO);
@@ -172,8 +174,10 @@ class App
             } else {
                 $this->setBittrexBalances($balances);
                 $this->setBittrexExchangeFilters($this->prepareBittrexExchangeInfo());
-                $log = new Log("Bittrex connected!",Log::LOG_LEVEL_INFO);
-                $this->getJink()->postLog($log);
+                if (!$jinkClientId) {
+                    $log = new Log("Bittrex connected!", Log::LOG_LEVEL_INFO);
+                    $this->getJink()->postLog($log);
+                }
             }
         } catch (\Exception $e) {
             $log = new Log("Invalid Bittrex credentials - ignoring",Log::LOG_LEVEL_INFO);
@@ -192,8 +196,10 @@ class App
             } else {
                 $this->setKucoinBalances($balances);
                 $this->setKucoinExchangeFilters($this->prepareKucoinExchangeInfo());
-                $log = new Log("KuCoin connected!",Log::LOG_LEVEL_INFO);
-                $this->getJink()->postLog($log);
+                if (!$jinkClientId) {
+                    $log = new Log("KuCoin connected!", Log::LOG_LEVEL_INFO);
+                    $this->getJink()->postLog($log);
+                }
             }
         } catch (\Exception $e) {
             $log = new Log("Invalid Kucoin credentials - ignoring",Log::LOG_LEVEL_INFO);
