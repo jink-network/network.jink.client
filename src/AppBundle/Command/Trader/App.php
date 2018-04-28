@@ -28,7 +28,7 @@ class App
     const INTERVAL_TIME = 500; // ms
     const EVENT_STATUS_INTERVAL = 30; //~s
     const PROCESS_LIMIT = 8;
-    const CERTAINTY_LIMIT = 3;
+    const CERTAINTY_LIMIT = 1;
 
     /** @var string */
     private $binaneApiKey;
@@ -125,6 +125,7 @@ class App
                                 $jinkClientId = null)
     {
         $this->setProcesses([]);
+        $this->setExchanges([]);
         $this->setCertaintyLimit($this::CERTAINTY_LIMIT);
         $this->setIntervalTime($this::INTERVAL_TIME);
         $this->setProductionMode(!(bool)$dev);
@@ -143,57 +144,61 @@ class App
         /* Set up Binance */
         $this->setBinaneApiKey($binanceApiKey);
         $this->setBinaneApiSecret($binanceApiSecret);
-        $this->setBinance(new \Binance\API($binanceApiKey, $binanceApiSecret, ['useServerTime'=>true]));
+        try {
+            $this->setBinance(new \Binance\API($binanceApiKey, $binanceApiSecret, ['useServerTime' => true]));
+            $balances = $this->getBinance()->balances();
+            if (!$balances) {
+                throw new \Exception('Wrong API Keys');
+            } else {
+                $this->setBinanceBalances($balances);
+                $this->setBinanceExchangeFilters($this->prepareBinanceExchangeInfo());
+                $log = new Log("Binance connected!",Log::LOG_LEVEL_INFO);
+                $this->getJink()->postLog($log);
+            }
+        } catch (\Exception $e) {
+            $log = new Log("Invalid Binance response - ignoring: ".$e->getMessage(),Log::LOG_LEVEL_INFO);
+            $this->getJink()->postLog($log);
+            $this->setBinanceBalances([]);
+        }
 
         /* Set up Bittrex */
         $this->setBittrexApiKey($bittrexApiKey);
         $this->setBittrexApiSecret($bittrexApiSecret);
-        $this->setBittrex(new BittrexManager($bittrexApiKey, $bittrexApiSecret));
+        try {
+            $this->setBittrex(new BittrexManager($bittrexApiKey, $bittrexApiSecret));
+            $balances = json_decode($this->getBittrex()->getBalances(), true);
+            if (!$balances['success']) {
+                throw new \Exception('Wrong API Keys');
+            } else {
+                $this->setBittrexBalances($balances);
+                $this->setBittrexExchangeFilters($this->prepareBittrexExchangeInfo());
+                $log = new Log("Bittrex connected!",Log::LOG_LEVEL_INFO);
+                $this->getJink()->postLog($log);
+            }
+        } catch (\Exception $e) {
+            $log = new Log("Invalid Bittrex response - ignoring: ".$e->getMessage(),Log::LOG_LEVEL_INFO);
+            $this->getJink()->postLog($log);
+            $this->setBittrexBalances([]);
+        }
 
         /* Set up KuCoin */
         $this->setKucoinApiKey($kucoinApiKey);
         $this->setKucoinApiSecret($kucoinApiSecret);
-        $this->setKucoin(new kucoin(['apiKey' => $kucoinApiKey, 'secret' => $kucoinApiSecret]));
-
-        $this->resetApp();
-    }
-
-    /**
-     * Reset App
-     */
-    public function resetApp() {
-
-        // prepare Binance
-        $balances = $this->getBinance()->balances();
-        if (!$balances) {
-            $log = new Log("Invalid Binance credentials - ignoring",Log::LOG_LEVEL_ERROR);
-            $this->getJink()->postLog($log);
-            $this->setBinanceBalances([]);
-        } else {
-            $this->setBinanceBalances($balances);
-            $this->setBinanceExchangeFilters($this->prepareBinanceExchangeInfo());
-        }
-
-        // pepare Bittrex
-        $balances = json_decode($this->getBittrex()->getBalances(), true);
-        if (!$balances['success']) {
-            $log = new Log("Invalid Bittrex credentials - ignoring",Log::LOG_LEVEL_ERROR);
-            $this->getJink()->postLog($log);
-            $this->setBittrexBalances([]);
-        } else {
-            $this->setBittrexBalances($balances);
-            $this->setBittrexExchangeFilters($this->prepareBittrexExchangeInfo());
-        }
-
-        // pepare Kucoin
-        $balances = $this->getKucoin()->fetch_balance();
-        if (!$balances['info']) {
-            $log = new Log("Invalid Kucoin credentials - ignoring",Log::LOG_LEVEL_ERROR);
+        try {
+            $this->setKucoin(new kucoin(['apiKey' => $kucoinApiKey, 'secret' => $kucoinApiSecret]));
+            $balances = $this->getKucoin()->fetch_balance();
+            if (!$balances['info']) {
+                throw new \Exception('Wrong API Keys');
+            } else {
+                $this->setKucoinBalances($balances);
+                $this->setKucoinExchangeFilters($this->prepareKucoinExchangeInfo());
+                $log = new Log("KuCoin connected!",Log::LOG_LEVEL_INFO);
+                $this->getJink()->postLog($log);
+            }
+        } catch (\Exception $e) {
+            $log = new Log("Invalid Kucoin response - ignoring: ".$e->getMessage(),Log::LOG_LEVEL_INFO);
             $this->getJink()->postLog($log);
             $this->setKucoinBalances([]);
-        } else {
-            $this->setKucoinBalances($balances);
-            $this->setKucoinExchangeFilters($this->prepareKucoinExchangeInfo());
         }
 
         $this->getJink()->updateLastSignal();

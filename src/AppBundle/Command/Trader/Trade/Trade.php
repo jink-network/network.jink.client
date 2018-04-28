@@ -663,24 +663,31 @@ class Trade {
     public function checkLimits() {
         $limits = $this->getLimit();
         // sell as success
-        if ($this->getCurrent()->getProfit() >= $limits->getProfit()) {
-            $this->getCertainty()->setProfit($this->getCertainty()->getProfit()+1);
-        } else {
-            $this->getCertainty()->setProfit(0);
+
+        if ($limits->getProfit() > 0) {
+            if ($this->getCurrent()->getProfit() >= $limits->getProfit()) {
+                $this->getCertainty()->setProfit($this->getCertainty()->getProfit() + 1);
+            } else {
+                $this->getCertainty()->setProfit(0);
+            }
         }
 
         // sell as dump
-        if ($this->getCurrent()->getDump() < 0 && $this->getCurrent()->getLoss() > 0 && abs($this->getCurrent()->getDump()) >= $limits->getDump()) {
-            $this->getCertainty()->setDump($this->getCertainty()->getDump()+1);
-        } else {
-            $this->getCertainty()->setDump(0);
+        if ($limits->getDump() > 0) {
+            if ($this->getCurrent()->getDump() < 0 && $this->getCurrent()->getLoss() > 0 && abs($this->getCurrent()->getDump()) >= $limits->getDump()) {
+                $this->getCertainty()->setDump($this->getCertainty()->getDump() + 1);
+            } else {
+                $this->getCertainty()->setDump(0);
+            }
         }
 
         // sell as exit
-        if ($this->getCurrent()->getLoss() < 0 && abs($this->getCurrent()->getLoss()) >= $limits->getLoss()) {
-            $this->getCertainty()->setLoss($this->getCertainty()->getLoss()+1);
-        } else {
-            $this->getCertainty()->setLoss(0);
+        if ($limits->getLoss() > 0) {
+            if ($this->getCurrent()->getLoss() < 0 && abs($this->getCurrent()->getLoss()) >= $limits->getLoss()) {
+                $this->getCertainty()->setLoss($this->getCertainty()->getLoss() + 1);
+            } else {
+                $this->getCertainty()->setLoss(0);
+            }
         }
     }
 
