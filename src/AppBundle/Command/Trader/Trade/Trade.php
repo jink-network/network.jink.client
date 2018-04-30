@@ -128,6 +128,22 @@ class Trade {
     /**
      * @return float
      */
+    public function getFee() {
+        if ($this->getExchange() == 'binance') {
+            return 0.0015;
+        }
+        if ($this->getExchange() == 'bittrex') {
+            return 0.003;
+        }
+        if ($this->getExchange() == 'kucoin') {
+            return 0.0015;
+        }
+        return 0;
+    }
+
+    /**
+     * @return float
+     */
     public function getAmount(): float
     {
         return $this->amount;
@@ -490,12 +506,12 @@ class Trade {
 
     /**
      * @param App $app
-     * @param float $fee
-     * @return array
+     * @param float $deviation
+     * @return array|mixed
      */
-    private function sellMarket(App $app, $fee=0.001, $deviation = 0.1) {
+    private function sellMarket(App $app, $deviation = 0.1) {
 
-        $sellTokenAmount = $this->getBuyTokenAmount()-($this->getBuyTokenAmount() * $fee);
+        $sellTokenAmount = $this->getBuyTokenAmount()-($this->getBuyTokenAmount() * $this->getFee());
         $sellTokenAmount = $this->roundTokenAmount($sellTokenAmount);
         $sellPrice = 0;
 
