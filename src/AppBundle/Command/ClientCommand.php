@@ -138,24 +138,14 @@ class ClientCommand extends ContainerAwareCommand
                         $trade->setToken($token);
                         $trade->setAmount((float)$tokenAmount);
 
-                        $buyPrice = $trade->getCurrentPrice($app, 'buy');
-
-                        if (!$buyPrice) {
-                            $this->logs[] = new Log("No such pair (".$basicToken."/".$token.") on ".$trade->getExchange(), Log::LOG_LEVEL_ERROR);
-                            continue;
-                        }
-
                         if ($tokenAmount <= 0) {
                             $this->logs[] = new Log("Ignoring ".$basicToken."/".$token." according to settings", Log::LOG_LEVEL_INFO);
                             continue;
                         }
 
-                        $trade->getPrice()->setBuy($buyPrice);
-                        $trade->setBuyTokenAmount($trade->getAmount() / $trade->getPrice()->getBuy());
-
                         $trade->setExchangeFilters($app->getExchangeFiltersTokenPair($trade));
 
-                        $this->logs[] = new Log("Placing Buy Order for " . $trade->getBasicToken() . "/" . $trade->getToken() . " at price " . sprintf("%.8f", $trade->getPrice()->getBuy()), Log::LOG_LEVEL_INFO);
+                        $this->logs[] = new Log("Placing Buy Order for " . $trade->getBasicToken() . "/" . $trade->getToken(), Log::LOG_LEVEL_INFO);
 
                         if ($app->isProduction()) {
                             $result = $trade->buyMarket($app);
@@ -170,6 +160,9 @@ class ClientCommand extends ContainerAwareCommand
                                 $this->events[] = new Event(Event::ACTION_BUY, $trade);
                             }
                         } else {
+                            $trade->getPrice()->setBuy($trade->getCurrentPrice($app, 'buy'));
+                            $trade->setBuyTokenAmount($trade->getAmount() / $trade->getPrice()->getBuy());
+
                             $app->setTradeProcess($trade);
                             $this->events[] = new Event(Event::ACTION_BUY, $trade);
                         }

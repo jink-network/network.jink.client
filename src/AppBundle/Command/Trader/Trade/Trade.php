@@ -417,13 +417,13 @@ class Trade {
     public function buyMarket(App $app, $deviation = 0.1) {
         $result = false;
 
-        $buyTokenAmount = $this->roundTokenAmount($this->getBuyTokenAmount());
-
-        if (!$buyTokenAmount) {
-            return ['msg' => 'Invalid amount to Buy: '.$this->getBuyTokenAmount().', rounded to 0'];
-        }
-
         if ($this->getExchange() == 'binance') {
+
+            $buyTokenAmount = $this->roundTokenAmount($this->getAmount() / $this->getCurrentPrice($app, 'buy'));
+            if (!$buyTokenAmount) {
+                return ['msg' => 'Invalid amount to Buy: '.$this->getBuyTokenAmount().', rounded to 0'];
+            }
+
             $result = $app->getBinance()->marketBuy($this->getTokenPair(), $buyTokenAmount);
 
             $this->setBuyTokenAmount($buyTokenAmount);
@@ -439,31 +439,38 @@ class Trade {
 
             $orderBook = json_decode($app->getBittrex()->getOrderBook($this->getTokenPair(), 'sell'), true);
 
-            $sumQuantity = 0;
             $sumPrice = 0;
             $maxPrice = 0;
             foreach($orderBook['result'] as $order) {
-                $sumQuantity += $order['Quantity'];
                 $sumPrice += $order['Rate'] * $order['Quantity'];
-                if ($sumQuantity >= ($this->getBuyTokenAmount())) {
+                if ($sumPrice >= ($this->getAmount())) {
                     $maxPrice = $order['Rate']*(1+$deviation);
                     break;
                 }
             }
 
-            $result = json_decode($app->getBittrex()->buyLimit($this->getTokenPair(), $buyTokenAmount, $maxPrice), true);
-            $orderId = $result['result']['uuid'];
-            sleep(2);
-            $order = json_decode($app->getBittrex()->getOrder($orderId), true);
+            $buyTokenAmount = $this->roundTokenAmount($this->getAmount() / $maxPrice);
+            if (!$buyTokenAmount) {
+                return ['msg' => 'Invalid amount to Buy: '.$this->getBuyTokenAmount().', rounded to 0'];
+            }
 
-            if (isset($order['result']['Quantity']) && isset($order['result']['QuantityRemaining']) && ($order['result']['Quantity'] - $order['result']['QuantityRemaining']) == $buyTokenAmount) {
-                $buyPrice = isset($order['result']['PricePerUnit'])?$order['result']['PricePerUnit']:0;
-                $this->setBuyTokenAmount($buyTokenAmount);
-                $this->getPrice()->setBuy($buyPrice);
-                $this->getPrice()->setMax($this->getPrice()->getBuy());
-                $result['orderId'] = $orderId;
+            $result = json_decode($app->getBittrex()->buyLimit($this->getTokenPair(), $buyTokenAmount, $maxPrice), true);
+            if (isset($result['result']['uuid'])) {
+                $orderId = $result['result']['uuid'];
+                sleep(2);
+                $order = json_decode($app->getBittrex()->getOrder($orderId), true);
+
+                if (isset($order['result']['Quantity']) && isset($order['result']['QuantityRemaining']) && ($order['result']['Quantity'] - $order['result']['QuantityRemaining']) == $buyTokenAmount) {
+                    $buyPrice = isset($order['result']['PricePerUnit'])?$order['result']['PricePerUnit']:0;
+                    $this->setBuyTokenAmount($buyTokenAmount);
+                    $this->getPrice()->setBuy($buyPrice);
+                    $this->getPrice()->setMax($this->getPrice()->getBuy());
+                    $result['orderId'] = $orderId;
+                } else {
+                    $result['msg'] = 'Filled less than 100%, please check on Bittrex and proceed manually';
+                }
             } else {
-                $result['msg'] = 'Filled less than 100%, please check on Bittrex and proceed manually';
+                $result['msg'] = 'Bittrex setting up BUY order error (check Bittrex for order details)' ;
             }
         }
 
@@ -471,16 +478,19 @@ class Trade {
 
             $orderBook = $app->getKucoin()->fetch_order_book($this->getTokenPair(), null, ['limit' => '50']);
 
-            $sumQuantity = 0;
             $sumPrice = 0;
             $maxPrice = 0;
             foreach($orderBook['bids'] as $order) {
-                $sumQuantity += $order['1'];
                 $sumPrice += $order['0'] * $order['1'];
-                if ($sumQuantity >= ($this->getBuyTokenAmount())) {
+                if ($sumPrice >= ($this->getAmount())) {
                     $maxPrice = $order['0']*(1+$deviation);
                     break;
                 }
+            }
+
+            $buyTokenAmount = $this->roundTokenAmount($this->getAmount() / $maxPrice);
+            if (!$buyTokenAmount) {
+                return ['msg' => 'Invalid amount to Buy: '.$this->getBuyTokenAmount().', rounded to 0'];
             }
 
             try {
@@ -545,16 +555,21 @@ class Trade {
             }
 
             $result = json_decode($app->getBittrex()->sellLimit($this->getTokenPair(), $sellTokenAmount, $minPrice), true);
-            $orderId = $result['result']['uuid'];
-            sleep(2);
-            $order = json_decode($app->getBittrex()->getOrder($orderId), true);
+            if (isset($result['result']['uuid'])) {
+                $orderId = $result['result']['uuid'];
+                sleep(2);
+                $order = json_decode($app->getBittrex()->getOrder($orderId), true);
 
-            if (isset($order['result']['Quantity']) && isset($order['result']['QuantityRemaining']) && ($order['result']['Quantity'] - $order['result']['QuantityRemaining']) == $sellTokenAmount) {
-                $sellPrice = isset($order['result']['PricePerUnit'])?$order['result']['PricePerUnit']:0;
-                $result['orderId'] = $orderId;
+                if (isset($order['result']['Quantity']) && isset($order['result']['QuantityRemaining']) && ($order['result']['Quantity'] - $order['result']['QuantityRemaining']) == $sellTokenAmount) {
+                    $sellPrice = isset($order['result']['PricePerUnit'])?$order['result']['PricePerUnit']:0;
+                    $result['orderId'] = $orderId;
+                } else {
+                    $result['msg'] = 'Filled less than 100%, please check on Bittrex and proceed manually';
+                }
             } else {
-                $result['msg'] = 'Filled less than 100%, please check on Bittrex and proceed manually';
+                $result['msg'] = 'Bittrex setting up SELL order failed (check Bittrex for order details)';
             }
+
         }
 
         if ($this->getExchange() == 'kucoin') {
