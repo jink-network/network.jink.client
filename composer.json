@@ -23,12 +23,20 @@
         {
             "url": "https://github.com/jink-network/php-binance-api",
             "type": "vcs"
+        },
+        {
+            "url": "https://github.com/jink-network/bittrex-api",
+            "type": "vcs"
+        },
+        {
+            "url": "https://github.com/jink-network/ccxt",
+            "type": "vcs"
         }
     ],
     "require": {
         "php": ">=5.5.9",
-        "ccxt/ccxt": "^1.13",
-        "codenix-sv/bittrex-api": "~0.2",
+        "ccxt/ccxt": "^1.14",
+        "codenix-sv/bittrex-api": "@dev",
         "doctrine/doctrine-bundle": "^1.6",
         "doctrine/orm": "^2.5",
         "jaggedsoft/php-binance-api": "@dev",

@@ -143,7 +143,13 @@ class ClientCommand extends ContainerAwareCommand
                             continue;
                         }
 
-                        $trade->setExchangeFilters($app->getExchangeFiltersTokenPair($trade));
+                        $filters = $app->getExchangeFiltersTokenPair($trade);
+                        if (!is_array($filters)) {
+                            $app->resetExchanges();
+                            $this->logs[] = new Log("Ignoring, missing exchange info for pair: ".$basicToken."/".$token." on ".$trade->getExchange().". Updating exchange info now", Log::LOG_LEVEL_ERROR);
+                            continue;
+                        }
+                        $trade->setExchangeFilters($filters);
 
                         $this->logs[] = new Log("Placing Buy Order for " . $trade->getBasicToken() . "/" . $trade->getToken(), Log::LOG_LEVEL_INFO);
 

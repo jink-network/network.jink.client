@@ -723,6 +723,15 @@ class App
     }
 
     /**
+     *
+     */
+    public function resetExchanges() {
+        $this->prepareBinanceExchangeInfo();
+        $this->prepareBittrexExchangeInfo();
+        $this->prepareKucoinExchangeInfo();
+    }
+
+    /**
      * @return array
      */
     private function prepareBinanceExchangeInfo()
