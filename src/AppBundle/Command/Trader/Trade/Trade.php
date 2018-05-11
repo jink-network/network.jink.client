@@ -470,7 +470,7 @@ class Trade {
                     $result['msg'] = 'Filled less than 100%, please check on Bittrex and proceed manually';
                 }
             } else {
-                $result['msg'] = 'Bittrex setting up BUY order error (check Bittrex for order details)' ;
+                $result['msg'] = 'Bittrex setting up BUY order error (Account has insufficient balance for requested action?)' ;
             }
         }
 

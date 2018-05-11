@@ -726,9 +726,15 @@ class App
      *
      */
     public function resetExchanges() {
-        $this->prepareBinanceExchangeInfo();
-        $this->prepareBittrexExchangeInfo();
-        $this->prepareKucoinExchangeInfo();
+        if ($this->getExchange('binance')) {
+            $this->prepareBinanceExchangeInfo();
+        }
+        if ($this->getExchange('bittrex')) {
+            $this->prepareBittrexExchangeInfo();
+        }
+        if ($this->getExchange('kucoin')) {
+            $this->prepareKucoinExchangeInfo();
+        }
     }
 
     /**
