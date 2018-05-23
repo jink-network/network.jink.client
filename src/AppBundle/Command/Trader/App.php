@@ -158,7 +158,7 @@ class App
                 }
             }
         } catch (\Exception $e) {
-            $log = new Log("Invalid Binance credentials - ignoring: ",Log::LOG_LEVEL_INFO);
+            $log = new Log("Binance - ignoring: ",Log::LOG_LEVEL_INFO);
             $this->getJink()->postLog($log);
             $this->setBinanceBalances([]);
         }
@@ -180,7 +180,7 @@ class App
                 }
             }
         } catch (\Exception $e) {
-            $log = new Log("Invalid Bittrex credentials - ignoring",Log::LOG_LEVEL_INFO);
+            $log = new Log("Bittrex - ignoring",Log::LOG_LEVEL_INFO);
             $this->getJink()->postLog($log);
             $this->setBittrexBalances([]);
         }
@@ -202,7 +202,7 @@ class App
                 }
             }
         } catch (\Exception $e) {
-            $log = new Log("Invalid Kucoin credentials - ignoring",Log::LOG_LEVEL_INFO);
+            $log = new Log("Kucoin - ignoring: ".get_class($e).' : '.$e->getMessage(),Log::LOG_LEVEL_INFO);
             $this->getJink()->postLog($log);
             $this->setKucoinBalances([]);
         }
