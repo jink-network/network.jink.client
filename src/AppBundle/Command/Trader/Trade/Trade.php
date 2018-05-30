@@ -467,7 +467,7 @@ class Trade {
                     $this->getPrice()->setMax($this->getPrice()->getBuy());
                     $result['orderId'] = $orderId;
                 } else {
-                    $result['msg'] = 'Filled less than 100%, please check on Bittrex and proceed manually';
+                    $result['msg'] = 'Failed to buy with desired price - order book was cleard out - handle your trade manually';
                 }
             } else {
                 $result['msg'] = 'Bittrex setting up BUY order error (Account has insufficient balance for requested action?)' ;
@@ -496,19 +496,23 @@ class Trade {
             try {
                 $result = $app->getKucoin()->create_order($this->getTokenPair(), 'limit', 'BUY', $buyTokenAmount, $maxPrice);
                 $orderId = $result['info']['data']['orderOid'];
-                sleep(2);
+                sleep(3);
                 $order = $app->getKucoin()->fetch_order($orderId, $this->getTokenPair(), ['type' => 'BUY']);
+
+                if (isset($order['info']['dealPriceAverage']) && isset($order['info']['pendingAmount']) && ($order['info']['pendingAmount'] == 0)) {
+                    $buyPrice = isset($order['info']['dealPriceAverage'])?$order['info']['dealPriceAverage']:0;
+                    $this->setBuyTokenAmount($buyTokenAmount);
+                    $this->getPrice()->setBuy($buyPrice);
+                    $this->getPrice()->setMax($this->getPrice()->getBuy());
+                    $result['orderId'] = $orderId;
+                } else {
+                    $result['msg'] = 'Failed to buy with desired price - order book was cleard out - handle your trade manually';
+                }
+
             } catch (\Exception $e) {
                 $result['msg'] = 'Kucoin setting up BUY order error (check Kucoin for order details): '.$e->getMessage();
             }
 
-            if (isset($order['info']['dealPriceAverage']) && isset($order['info']['pendingAmount']) && ($order['info']['pendingAmount'] == 0)) {
-                $buyPrice = isset($order['info']['dealPriceAverage'])?$order['info']['dealPriceAverage']:0;
-                $this->setBuyTokenAmount($buyTokenAmount);
-                $this->getPrice()->setBuy($buyPrice);
-                $this->getPrice()->setMax($this->getPrice()->getBuy());
-                $result['orderId'] = $orderId;
-            }
         }
 
         return $result;
